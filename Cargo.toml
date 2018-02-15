@@ -1,0 +1,22 @@
+[package]
+name = "im9"
+version = "0.0.1"
+authors = ["brambuurlage@gmail.com"]
+
+[lib]
+name = "im9"
+path = "./src/lib.rs"
+
+[dependencies]
+downcast = "0.9.1"
+smallvec = "0.6.0"
+rusttype = "0.3.0"
+image = "0.18.0"
+clipboard = "0.4.4"
+winit = { version = "0.11.0", optional = true }
+vulkano = { git = "https://github.com/Kurble/vulkano", optional = true }
+vulkano-shader-derive = { git = "https://github.com/Kurble/vulkano", optional = true }
+
+[features]
+vulkano-renderer=["vulkano","vulkano-shader-derive"]
+winit-events=["winit"]
