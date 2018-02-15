@@ -1,10 +1,10 @@
 [package]
-name = "im9"
-version = "0.0.1"
+name = "gggui"
+version = "0.1.0"
 authors = ["brambuurlage@gmail.com"]
 
 [lib]
-name = "im9"
+name = "gggui"
 path = "./src/lib.rs"
 
 [dependencies]
