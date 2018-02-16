@@ -56,6 +56,7 @@ pub struct UiContext<'a> {
     capture: Capture,
     cursor: MousePosition,
     viewport: Rect,
+    enabled: bool,
 }
 
 impl Ui {
@@ -115,6 +116,7 @@ impl Ui {
             capture: Capture::None,
             cursor: cursor,
             viewport: viewport,
+            enabled: true,
         }
     }
 
@@ -178,7 +180,8 @@ impl<'a> UiContext<'a> {
         &'b mut self, 
         parent: Box<Layout+'b>, 
         events: EventVec,
-        cursor: MousePosition
+        cursor: MousePosition,
+        enabled: bool
     ) -> UiContext<'b> {
         UiContext {
             ui: self.ui,
@@ -187,6 +190,7 @@ impl<'a> UiContext<'a> {
             capture: self.capture,
             cursor: cursor,
             viewport: self.viewport,
+            enabled: enabled,
         }
     }
 
@@ -210,7 +214,15 @@ impl<'a> UiContext<'a> {
         let mut state = self.ui.get_state::<W>(id);
         let mut is_focused = self.ui.focus.as_ref().map_or(false, |f| f.0 == id);
 
-        if W::tabstop() && id != "" {
+        let enabled = self.enabled && widget.enabled(&state);
+
+        //--------------------------------------------------------------------------------------//
+        // handle layouting
+        let layout = self.parent.layout(Box::new(|layout| widget.measure(&state, layout)));
+
+        //--------------------------------------------------------------------------------------//
+        // handle tabstops
+        if W::tabstop() && id != "" && enabled {
             if self.ui.focus.is_none() && widget.autofocus() { 
                 is_focused = true;
             }
@@ -231,9 +243,11 @@ impl<'a> UiContext<'a> {
             }
         }
 
-        let layout = self.parent.layout(widget.measure(&state));
-
-        let is_hovered = if is_focused || self.ui.previous_capture == Capture::None {
+        //--------------------------------------------------------------------------------------//
+        // handle events, children and rendering
+        let is_hovered = if !enabled {
+            false
+        } else if is_focused || self.ui.previous_capture == Capture::None {
             widget.hover(&mut state, layout, self.cursor)
         } else {
             false
@@ -255,7 +269,7 @@ impl<'a> UiContext<'a> {
                 cursor.visibility.map_or(Capture::None, |vis| {
                     self.ui.drawlist.push(Primitive::PushClip(vis));
                     let result = {
-                        let mut sub = self.sub(Box::new(layouter), events, cursor);
+                        let mut sub = self.sub(Box::new(layouter), events, cursor, enabled);
                         children(&mut sub);
                         sub.capture
                     };
@@ -266,7 +280,7 @@ impl<'a> UiContext<'a> {
             },
         };
 
-        if child_capture == Capture::None {
+        if child_capture == Capture::None && enabled {
             if is_hovered || is_focused {
                 for event in self.events.iter() {
                     match widget.event(&mut state, layout, self.cursor, event.clone(), is_focused) {
@@ -305,7 +319,7 @@ impl<'a> UiContext<'a> {
         }
 
         widget.postdraw(&state, layout, |p| self.ui.drawlist.push(p));
-        if W::tabstop() && is_focused {
+        if W::tabstop() && is_focused && enabled {
             self.ui.drawlist.push(Primitive::DrawRect(layout, Color::white().with_alpha(0.16)));
         }
         widget.result(&state)
@@ -358,18 +372,15 @@ impl<'a> UiContext<'a> {
                         .and_then(|c| Some(cmd.push(c)));
                 },
 
-                Primitive::DrawText(Text{ text, font, size }, rect, color, multi) => {
+                Primitive::DrawText(text, rect, color) => {
                     let color = [color.r, color.g, color.b, color.a];
                     let mode = 0;
                     let offset = vtx.len();
 
                     let vp = self.viewport;
                     self.ui.cache.draw_text(  
-                        &font,
-                        text.as_str(), 
-                        rusttype::Scale{ x: size, y: size }, 
+                        &text, 
                         rect,
-                        multi,
                         |uv, pos| {
                             let rc = pos.to_device_coordinates(vp);
                             vtx.push(Vertex{ pos: [rc.left, rc.top],     uv: uv.pt(0.0, 0.0), color, mode });

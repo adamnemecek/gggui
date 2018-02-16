@@ -2,7 +2,7 @@ use std::mem;
 use std::collections::HashMap;
 
 use rusttype;
-use rusttype::{Scale, vector, point};
+use rusttype::{vector, point};
 use image;
 use smallvec::SmallVec;
 
@@ -12,7 +12,6 @@ use render::*;
 use loadable::*;
 
 type GlyphCache = rusttype::gpu_cache::Cache<'static>;
-type PositionedGlyph = rusttype::PositionedGlyph<'static>;
 pub type Font = rusttype::Font<'static>;
 pub type FontId = usize;
 
@@ -132,46 +131,19 @@ impl Cache {
 
     pub fn draw_text<F: FnMut(Rect,Rect)>(
         &mut self, 
-        font: &(Font, FontId),
-        text: &str, 
-        scale: Scale, 
+        text: &Text,
         rect: Rect,
-        multi: bool,
         mut place_glyph: F
     ) {
         let start = point(rect.left, rect.top);
-        let width = rect.width();
-        let line = font.0.v_metrics(scale);
-
-        let mut last = None;
-        let mut x = 0.0;
-        let mut y = line.ascent;
-
-        let placed_glyphs = text
-            .chars()
-            .map(|c| font.0.glyph(c).unwrap())
-            .scan(0.0f32, |_, g| {
-
-                let g = g.scaled(scale);
-                let w = g.h_metrics().advance_width
-                    + last.map(|last| font.0.pair_kerning(scale, last, g.id())).unwrap_or(0.0);
-
-                if multi && x + w >= width {
-                    x = 0.0;
-                    y += line.ascent+line.descent+line.line_gap;
-                }
-
-                let next = g.positioned(start + vector(x, y));
-                last = Some(next.id());
-
-                x += w;
-
-                Some(next)
-            })
-            .collect::<Vec<PositionedGlyph>>();
+        
+        let mut placed_glyphs = Vec::with_capacity(text.text.len());
+        text.layout(rect, |g, x, _, y| {
+            placed_glyphs.push(g.positioned(start + vector(x, y)));
+        });
 
         for g in placed_glyphs.iter() {
-            self.glyphs.queue_glyph(font.1 as usize, g.clone());
+            self.glyphs.queue_glyph(text.font.1 as usize, g.clone());
         }
 
         let updates = &mut self.updates;
@@ -196,7 +168,7 @@ impl Cache {
         }).unwrap();
 
         for g in placed_glyphs.iter() {
-            self.glyphs.rect_for(font.1 as usize, g).unwrap().map(|(uv, pos)| {
+            self.glyphs.rect_for(text.font.1 as usize, g).unwrap().map(|(uv, pos)| {
                 place_glyph(
                     Rect {
                         left: uv.min.x * 0.5,

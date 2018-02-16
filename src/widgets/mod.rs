@@ -72,6 +72,8 @@ impl WidgetState for GenericWidgetState {  }
 
 impl WidgetState for () { }
 
+pub type WidgetMeasure<'a> = Box<Fn(Option<Rect>)->Option<Rect>+'a>;
+
 pub trait Widget {
     type Result;
     type State: WidgetState + Clone;
@@ -80,17 +82,24 @@ pub trait Widget {
     fn default() -> Self::State;
     fn tabstop() -> bool { false }
 
+    fn enabled(&self, _state: &Self::State) -> bool {
+        true
+    }
+
     fn measure(
         &self, 
-        state: &Self::State
+        state: &Self::State,
+        layout: Option<Rect>
     ) -> Option<Rect>;
 
     fn layout(
         &mut self, 
-        state: &Self::State, 
+        _state: &Self::State, 
         layout: Rect, 
-        child: Option<Rect>
-    ) -> Rect;
+        _child: WidgetMeasure
+    ) -> Rect {
+        layout
+    }
 
     fn event(
         &mut self, 
@@ -138,7 +147,7 @@ pub trait Widget {
 }
 
 pub trait Layout {
-    fn layout(&mut self, child: Option<Rect>) -> Rect;
+    fn layout(&mut self, child: WidgetMeasure) -> Rect;
 }
 
 pub struct LayoutCell<'a, W: Widget+'a> {
@@ -163,7 +172,7 @@ impl<'a, W: Widget> LayoutCell<'a, W> {
 
 impl<'a, W: Widget> Layout for LayoutCell<'a, W> {
 
-    fn layout(&mut self, child: Option<Rect>) -> Rect {
+    fn layout(&mut self, child: WidgetMeasure) -> Rect {
         self.widget.layout(self.state, self.layout, child)
     }
 
@@ -171,8 +180,8 @@ impl<'a, W: Widget> Layout for LayoutCell<'a, W> {
 
 impl Layout for LayoutRoot {
 
-    fn layout(&mut self, child: Option<Rect>) -> Rect {
-        child.unwrap_or(self.viewport)
+    fn layout(&mut self, child: WidgetMeasure) -> Rect {
+        child(None).unwrap_or(self.viewport)
     }
 
 }

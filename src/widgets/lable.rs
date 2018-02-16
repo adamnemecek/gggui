@@ -18,12 +18,8 @@ impl Widget for Lable {
 
     fn default() -> Self::State { () }
 
-    fn measure(&self, _state: &Self::State) -> Option<Rect> {
-        Some(self.text.measure(None))
-    }
-
-    fn layout(&mut self, _state: &Self::State, layout: Rect, _child: Option<Rect>) -> Rect {
-        layout
+    fn measure(&self, _state: &Self::State, layout: Option<Rect>) -> Option<Rect> {
+        Some(self.text.measure(layout))
     }
 
     fn event(
@@ -52,12 +48,7 @@ impl Widget for Lable {
         layout: Rect, 
         mut submit: F
     ) {
-        submit(Primitive::DrawText(
-            self.text.clone(), 
-            layout, 
-            self.text_color, 
-            true
-        ));
+        submit(Primitive::DrawText(self.text.clone(), layout, self.text_color));
     }
 
     fn result(self, _: &Self::State) -> Self::Result {

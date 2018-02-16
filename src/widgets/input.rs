@@ -27,7 +27,7 @@ impl<'a> Input<'a> {
         text_size: f32, 
         text_color: Color
     ) -> Self {
-        let render_text = Text{ text: text.clone(), font, size: text_size };
+        let render_text = Text{ text: text.clone(), font, size: text_size, wrap: TextWrap::NoWrap };
 
         Input {
             patch,
@@ -73,12 +73,8 @@ impl<'a> Widget for Input<'a> {
         self.focus
     }
 
-    fn measure(&self, _state: &Self::State) -> Option<Rect> {
+    fn measure(&self, _state: &Self::State, _layout: Option<Rect>) -> Option<Rect> {
         self.size
-    }
-
-    fn layout(&mut self, _state: &Self::State, layout: Rect, _child: Option<Rect>) -> Rect {
-        layout
     }
 
     fn event(
@@ -108,7 +104,7 @@ impl<'a> Widget for Input<'a> {
             InputState::Hovered => {
                 if let Event::Press(Key::LeftMouseButton, _) = event {
                     capture = Capture::CaptureFocus;
-                    let hit = text.hitdetect(relative_cursor, None);
+                    let hit = text.hitdetect(relative_cursor, content);
                     InputState::Selecting(hit, hit, Instant::now())
                 } else {
                     InputState::Hovered
@@ -119,7 +115,7 @@ impl<'a> Widget for Input<'a> {
                 if let Event::Release(Key::LeftMouseButton, _) = event {
                     InputState::Selected(from, to, since)
                 } else {
-                    let hit = text.hitdetect(relative_cursor, None);
+                    let hit = text.hitdetect(relative_cursor, content);
                     if let Event::Idle = event {
                         InputState::Selecting(from, hit, since)
                     } else {
@@ -132,7 +128,7 @@ impl<'a> Widget for Input<'a> {
                     Event::Press(Key::LeftMouseButton, _) => {
                         if cursor.inside(&layout) {
                             capture = Capture::CaptureFocus;
-                            let hit = text.hitdetect(relative_cursor, None);
+                            let hit = text.hitdetect(relative_cursor, content);
                             InputState::Selecting(hit, hit, Instant::now())
                         } else {
                             InputState::Idle
@@ -331,7 +327,7 @@ impl<'a> Widget for Input<'a> {
             &InputState::Idle => (),
             &InputState::Hovered => (),
             &InputState::Selecting(from, to, since) | &InputState::Selected(from, to, since) => {
-                let range = text.measure_range(from.min(to), from.max(to), None);
+                let range = text.measure_range(from.min(to), from.max(to), content);
                 if to != from {
                     submit(Primitive::DrawRect(
                         Rect {
@@ -364,7 +360,7 @@ impl<'a> Widget for Input<'a> {
             },
         }
         
-        submit(Primitive::DrawText(text, content, self.text_color, false));
+        submit(Primitive::DrawText(text, content, self.text_color));
 
         submit(Primitive::PopClip);
     }

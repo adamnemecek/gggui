@@ -29,7 +29,8 @@ impl Style for Default {
             text: Text {
                 text: txt.to_string(),
                 font: self.default_font.clone(),
-                size: 16.0
+                size: 16.0,
+                wrap: TextWrap::WordWrap,
             },
             text_color: Color{ r : 0.0, g: 0.0, b: 0.0, a: 1.0 }
         }
@@ -40,7 +41,8 @@ impl Style for Default {
             text: Text {
                 text: txt.to_string(),
                 font: self.default_font.clone(),
-                size: 28.0
+                size: 28.0,
+                wrap: TextWrap::NoWrap,
             },
             text_color: Color{ r : 0.0, g: 0.0, b: 0.0, a: 1.0 }
         }
@@ -75,7 +77,8 @@ impl Style for Default {
         Text {
             text: text.to_string(),
             font: self.default_font.clone(),
-            size: 16.0
+            size: 16.0,
+            wrap: TextWrap::NoWrap,
         }
     }
 }

@@ -48,7 +48,7 @@ impl Widget for Button {
         true
     }
 
-    fn measure(&self, _state: &Self::State) -> Option<Rect> {
+    fn measure(&self, _state: &Self::State, _layout: Option<Rect>) -> Option<Rect> {
         let measured = self.size.map_or_else(
             || self.normal.measure_with_content(
                 self.text.as_ref().map_or(
@@ -61,10 +61,6 @@ impl Widget for Button {
             |size| Rect{ left: 0.0, top: 0.0, right: size.0, bottom: size.1 }
         );
         Some(measured)
-    }
-
-    fn layout(&mut self, _state: &Self::State, layout: Rect, _child: Option<Rect>) -> Rect {
-        layout
     }
 
     fn event(
@@ -167,8 +163,7 @@ impl Widget for Button {
             submit(Primitive::DrawText(
                 text.clone(), 
                 patch.content_rect(layout), 
-                self.text_color, 
-                true
+                self.text_color
             ))
         });
     }
