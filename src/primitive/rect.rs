@@ -81,6 +81,15 @@ impl Rect {
         }
     }
 
+    pub fn size(&self) -> Rect {
+        Rect {
+            left: 0.0,
+            top: 0.0,
+            right: self.width(),
+            bottom: self.height(),
+        }
+    }
+
     pub fn width(&self) -> f32 {
         self.right-self.left
     }

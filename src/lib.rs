@@ -121,6 +121,17 @@ impl Ui {
             visibility: Some(viewport) 
         };
 
+        // set all windows to not-updated so they can be garbage collected
+        // after the next loop (if not updated again)
+        for window in self.windows.iter_mut() {
+            window.updated = false;
+        }
+        for window in self.active_window.iter_mut() { 
+            window.updated = false;
+        }
+
+        let enabled = self.active_window.is_none();
+
         UiContext { 
             ui: self,
             drawlist: Vec::new(),
@@ -130,7 +141,7 @@ impl Ui {
             capture: Capture::None,
             cursor: cursor,
             viewport: viewport,
-            enabled: true,
+            enabled: enabled,
         }
     }
 
@@ -214,6 +225,84 @@ impl<'a> UiContext<'a> {
             cursor: cursor,
             viewport: self.viewport,
             enabled: enabled,
+        }
+    }
+
+    pub fn window<
+        F: FnOnce(&mut UiContext)
+    > (
+        &mut self, 
+        id: &str, 
+        size: Rect, 
+        modal: bool, 
+        children: F
+    ) {
+        let window_position = self.ui.windows.iter().position(|w| w.id == id);
+
+        let occluded = window_position.as_ref().map_or(true, |i| {
+            for j in (i+1)..self.ui.windows.len() {
+                if self.cursor.inside(&self.ui.windows[j].rect) {
+                    return true;
+                }
+            }
+            for w in self.ui.active_window.as_ref() {
+                if self.cursor.inside(&w.rect) {
+                    return true;
+                }
+            }
+            false
+        });
+
+        let enabled = self.ui.active_window.as_ref().map_or(!occluded, |w| w.id == id);
+
+        let (win, capture) = {
+            let mut sub = UiContext {
+                ui: self.ui,
+                drawlist: Vec::new(),
+                drawlist_sub: Vec::new(),
+                parent: Box::new(LayoutRoot{ viewport: size }),
+                events: self.events.clone(),
+                capture: Capture::None,
+                cursor: self.cursor.expand(&size),
+                viewport: self.viewport,
+                enabled: enabled
+            };
+
+            sub.drawlist.push(Primitive::PushClip(self.viewport));
+            children(&mut sub);
+            sub.drawlist.append(&mut sub.drawlist_sub);
+            sub.drawlist.push(Primitive::PopClip);
+
+            (Window {
+                drawlist: sub.drawlist,
+                rect: size,
+                id: id.to_string(),
+                updated: true,
+                modal: modal,
+            }, sub.capture)
+        };
+
+        if modal {
+            if !enabled {
+                self.ui.active_window.take().map(|w| {
+                    assert!(!w.modal);
+                    self.ui.windows.push(w)
+                });
+                self.ui.focus.take();
+            }
+            self.ui.active_window = Some(win);
+        } else if capture == Capture::CaptureFocus {
+            self.ui.active_window = Some(win);
+        } else {
+            if let Some(i) = window_position {
+                self.ui.windows[i] = win;
+            } else {
+                self.ui.windows.push(win);
+            }
+        }
+
+        if capture != Capture::None {
+            self.capture = capture;
         }
     }
 
@@ -365,6 +454,10 @@ impl<'a> UiContext<'a> {
 
     pub fn draw(self) -> DrawList {
         self.ui.previous_capture = self.capture;
+        self.ui.windows.retain(|w| w.updated);
+        if let Some(&Window{ updated: false, .. }) = self.ui.active_window.as_ref() {
+            self.ui.active_window = None;
+        }
 
         let mut vtx = Vec::new();
         let mut cmd = Vec::new();
@@ -374,7 +467,15 @@ impl<'a> UiContext<'a> {
 
         let mut current_command = Command::Nop;
 
-        for primitive in self.drawlist {
+        let mut draw_lists = vec![self.drawlist];
+        for window in self.ui.windows.iter_mut() {
+            draw_lists.push(replace(&mut window.drawlist, vec![]));
+        }
+        for window in self.ui.active_window.iter_mut() {
+            draw_lists.push(replace(&mut window.drawlist, vec![]));
+        }
+
+        for primitive in draw_lists.into_iter().flat_map(|d| d) {
             match primitive {
                 Primitive::PushClip(scissor) => {
                     scissors.push(scissor);

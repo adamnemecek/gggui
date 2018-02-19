@@ -193,7 +193,9 @@ impl<'a, W: Widget> Layout for LayoutCell<'a, W> {
 impl Layout for LayoutRoot {
 
     fn layout(&mut self, child: WidgetMeasure) -> Rect {
-        child(None).unwrap_or(self.viewport)
+        child(None)
+            .unwrap_or(self.viewport.size())
+            .translate(self.viewport.left, self.viewport.top)
     }
 
 }
