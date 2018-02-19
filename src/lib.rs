@@ -121,16 +121,18 @@ impl Ui {
             visibility: Some(viewport) 
         };
 
+        let mut enabled = self.active_window.is_none();
+
         // set all windows to not-updated so they can be garbage collected
         // after the next loop (if not updated again)
         for window in self.windows.iter_mut() {
             window.updated = false;
+            enabled &= !cursor.inside(&window.rect);
         }
         for window in self.active_window.iter_mut() { 
             window.updated = false;
+            enabled &= !cursor.inside(&window.rect);
         }
-
-        let enabled = self.active_window.is_none();
 
         UiContext { 
             ui: self,
