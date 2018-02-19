@@ -16,13 +16,6 @@ pub enum FlowStyle {
     Absolute,
 }
 
-pub enum Background {
-    None,
-    Color(Color),
-    Image(Image),
-    Patch(Patch),
-}
-
 pub struct Flow {
     pub style: FlowStyle,
     pub pad: f32,
@@ -362,16 +355,22 @@ impl Widget for Flow {
     }
 
     fn predraw<F: FnMut(Primitive)>(&self, _state: &Self::State, layout: Rect, mut submit: F) { 
+        let color = if self.enabled {
+            Color::white()
+        } else {
+            Color{ r: 0.8, g: 0.8, b: 0.8, a: 1.0 }
+        };
+
         match &self.background {
             &Background::None => (),
             &Background::Color(ref color) => {
                 submit(Primitive::DrawRect(layout, *color));
             },
             &Background::Image(ref image) => {
-                submit(Primitive::DrawImage(image.clone(), layout, Color::white()));
+                submit(Primitive::DrawImage(image.clone(), layout, color));
             },
             &Background::Patch(ref patch) => {
-                submit(Primitive::Draw9(patch.clone(), layout, Color::white()));
+                submit(Primitive::Draw9(patch.clone(), layout, color));
             },
         }
     }

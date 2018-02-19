@@ -39,10 +39,11 @@ pub type EventVec = SmallVec<[Event; 4]>;
 pub type Font = (self::cache::Font, self::cache::FontId);
 
 struct Window {
-    drawlist: Option<Vec<Primitive>>,
+    drawlist: Vec<Primitive>,
     rect: Rect,
     id: String,
     updated: bool,
+    modal: bool,
 }
 
 pub struct Ui {
@@ -54,7 +55,7 @@ pub struct Ui {
     previous_capture: Capture,
     cache: Cache,
     windows: Vec<Window>,
-    active_window: Option<String>,
+    active_window: Option<Window>,
 }
 
 pub struct UiContext<'a> {
@@ -236,7 +237,7 @@ impl<'a> UiContext<'a> {
         let mut state = self.ui.get_state::<W>(id);
         let mut is_focused = self.ui.focus.as_ref().map_or(false, |f| f.0 == id);
 
-        let enabled = self.enabled && widget.enabled(&state);
+        let enabled = (self.enabled && widget.enabled(&state)) || W::window();
 
         //--------------------------------------------------------------------------------------//
         // handle layouting

@@ -24,3 +24,10 @@ pub enum Primitive {
     Draw9(Patch, Rect, Color),
     DrawImage(Image, Rect, Color),
 }
+
+pub enum Background {
+    None,
+    Color(Color),
+    Image(Image),
+    Patch(Patch),
+}

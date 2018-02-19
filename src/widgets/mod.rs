@@ -6,11 +6,13 @@ mod flow;
 mod button;
 mod input;
 mod lable;
+mod window;
 
 pub use self::flow::*;
 pub use self::button::*;
 pub use self::input::*;
 pub use self::lable::*;
+pub use self::window::*;
 
 pub enum StateType {
     Focus,
@@ -90,6 +92,10 @@ pub trait Widget {
 
     fn enabled(&self, _state: &Self::State) -> bool {
         true
+    }
+
+    fn window() -> bool {
+        false
     }
 
     fn measure(
