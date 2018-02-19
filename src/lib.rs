@@ -9,7 +9,7 @@ extern crate clipboard;
 #[cfg(feature="vulkano-renderer")] #[macro_use] pub extern crate vulkano_shader_derive;
 #[cfg(feature="winit-events")] pub extern crate winit;
 
-use std::mem;
+use std::mem::replace;
 use std::collections::HashMap;
 use smallvec::SmallVec;
 
@@ -38,6 +38,13 @@ pub type EventVec = SmallVec<[Event; 4]>;
 
 pub type Font = (self::cache::Font, self::cache::FontId);
 
+struct Window {
+    drawlist: Option<Vec<Primitive>>,
+    rect: Rect,
+    id: String,
+    updated: bool,
+}
+
 pub struct Ui {
     focus: Option<(String, Box<WidgetState>)>,
     last_tabstop_id: Option<String>,
@@ -45,12 +52,15 @@ pub struct Ui {
     state: HashMap<String, Box<WidgetState>>,
     cursor: (f32,f32),
     previous_capture: Capture,
-    drawlist: Vec<Primitive>,
     cache: Cache,
+    windows: Vec<Window>,
+    active_window: Option<String>,
 }
 
 pub struct UiContext<'a> {
     ui: &'a mut Ui,
+    drawlist: Vec<Primitive>,
+    drawlist_sub: Vec<Primitive>,
     parent: Box<Layout+'a>,
     events: EventVec,
     capture: Capture,
@@ -68,8 +78,9 @@ impl Ui {
             state: HashMap::new(),
             cursor: (0.0, 0.0),
             previous_capture: Capture::None,
-            drawlist: Vec::new(),
-            cache: Cache::new(2048)
+            cache: Cache::new(2048),
+            windows: Vec::new(),
+            active_window: None,
         }
     }
 
@@ -111,6 +122,8 @@ impl Ui {
 
         UiContext { 
             ui: self,
+            drawlist: Vec::new(),
+            drawlist_sub: Vec::new(),
             parent: Box::new(LayoutRoot{ viewport }),
             events: EventVec::from_vec(events),
             capture: Capture::None,
@@ -181,10 +194,19 @@ impl<'a> UiContext<'a> {
         parent: Box<Layout+'b>, 
         events: EventVec,
         cursor: MousePosition,
-        enabled: bool
+        enabled: bool,
+        drawlist_sub: bool
     ) -> UiContext<'b> {
+        let drawlist = if drawlist_sub {
+            replace(&mut self.drawlist_sub, Vec::new())
+        } else {
+            replace(&mut self.drawlist, Vec::new())
+        };
+
         UiContext {
             ui: self.ui,
+            drawlist: drawlist,
+            drawlist_sub: Vec::new(),
             parent: parent,
             events: events,
             capture: self.capture,
@@ -253,29 +275,44 @@ impl<'a> UiContext<'a> {
             false
         };
 
-        widget.predraw(&state, layout, |p| self.ui.drawlist.push(p));
+        widget.predraw(&state, layout, |p| self.drawlist.push(p));
 
         let child_capture = match widget.childs(&state, layout) {
             ChildType::None => Capture::None,
             child_type => {
                 let layouter = LayoutCell::new(&mut widget, &mut state, layout);
                 let events = self.events.clone();
-                let cursor = match child_type {
-                    ChildType::Intersect(ref clip) => self.cursor.sub(clip),
-                    ChildType::Expand(ref clip) => self.cursor.expand(clip),
+                let (cursor, drawlist_sub) = match child_type {
+                    ChildType::Intersect(ref clip) => (self.cursor.sub(clip), false),
+                    ChildType::Expand(ref clip) => (self.cursor.expand(clip), true),
                     _ => unreachable!(),
                 };
 
                 cursor.visibility.map_or(Capture::None, |vis| {
-                    self.ui.drawlist.push(Primitive::PushClip(vis));
-                    let result = {
-                        let mut sub = self.sub(Box::new(layouter), events, cursor, enabled);
+                    let (capture, new_drawlist) = {
+                        let mut sub = self.sub(
+                            Box::new(layouter), 
+                            events, 
+                            cursor, 
+                            enabled,
+                            drawlist_sub
+                        );
+                            
+                        sub.drawlist.push(Primitive::PushClip(vis));
                         children(&mut sub);
-                        sub.capture
-                    };
-                    self.ui.drawlist.push(Primitive::PopClip);
+                        sub.drawlist.append(&mut sub.drawlist_sub);
+                        sub.drawlist.push(Primitive::PopClip);
 
-                    result
+                        (sub.capture, sub.drawlist)
+                    };
+
+                    if drawlist_sub {
+                        replace(&mut self.drawlist_sub, new_drawlist);
+                    } else {
+                        replace(&mut self.drawlist, new_drawlist);
+                    }
+
+                    capture
                 })
             },
         };
@@ -318,9 +355,9 @@ impl<'a> UiContext<'a> {
             self.ui.update_state::<W>(id, state.clone(), false);
         }
 
-        widget.postdraw(&state, layout, |p| self.ui.drawlist.push(p));
+        widget.postdraw(&state, layout, |p| self.drawlist.push(p));
         if W::tabstop() && is_focused && enabled {
-            self.ui.drawlist.push(Primitive::DrawRect(layout, Color::white().with_alpha(0.16)));
+            self.drawlist.push(Primitive::DrawRect(layout, Color::white().with_alpha(0.16)));
         }
         widget.result(&state)
     }
@@ -336,7 +373,7 @@ impl<'a> UiContext<'a> {
 
         let mut current_command = Command::Nop;
 
-        for primitive in mem::replace(&mut self.ui.drawlist, Vec::new()) {
+        for primitive in self.drawlist {
             match primitive {
                 Primitive::PushClip(scissor) => {
                     scissors.push(scissor);
@@ -376,8 +413,8 @@ impl<'a> UiContext<'a> {
                     let color = [color.r, color.g, color.b, color.a];
                     let mode = 0;
                     let offset = vtx.len();
-
                     let vp = self.viewport;
+
                     self.ui.cache.draw_text(  
                         &text, 
                         rect,
@@ -405,6 +442,7 @@ impl<'a> UiContext<'a> {
                     let color = [color.r, color.g, color.b, color.a];
                     let mode = 1;
                     let offset = vtx.len();
+                    let vp = self.viewport;
 
                     patch.iterate_sections(false, rect.width(), |x, u| {
                         patch.iterate_sections(true, rect.height(), |y, v| {
@@ -413,7 +451,7 @@ impl<'a> UiContext<'a> {
                                 right: x.1 + rect.left,
                                 top: y.0 + rect.top,
                                 bottom: y.1 + rect.top,
-                            }.to_device_coordinates(self.viewport);
+                            }.to_device_coordinates(vp);
 
                             vtx.push(Vertex{ pos: [rc.left, rc.top],     uv: uv.pt(u.0, v.0), color, mode });
                             vtx.push(Vertex{ pos: [rc.right, rc.top],    uv: uv.pt(u.1, v.0), color, mode });

@@ -78,9 +78,15 @@ pub trait Widget {
     type Result;
     type State: WidgetState + Clone;
 
-    fn state_type() -> StateType { StateType::Focus }
+    fn state_type() -> StateType { 
+        StateType::Focus 
+    }
+
     fn default() -> Self::State;
-    fn tabstop() -> bool { false }
+
+    fn tabstop() -> bool { 
+        false 
+    }
 
     fn enabled(&self, _state: &Self::State) -> bool {
         true
