@@ -5,7 +5,6 @@ pub enum Align {
     Begin, Middle, End
 }
 
-
 #[derive(Clone,Copy,Debug)]
 pub enum FlowStyle {
     LinearHorizontal(Align),
@@ -86,18 +85,16 @@ impl Flow {
     }
 }
 
-impl WidgetState for bool { }
-
 fn clamp(x: f32, bound: (f32,f32)) -> f32 {
     x.max(bound.0).min(bound.1)
 }
 
 impl Widget for Flow {
     type Result = ();
-    type State = GenericWidgetState;
+    type State = ();
 
     fn default() -> Self::State {
-        GenericWidgetState::Idle
+        ()
     }
 
     fn enabled(&self, _: &Self::State) -> bool {
@@ -302,64 +299,6 @@ impl Widget for Flow {
                     Rect::from_wh(0.0, 0.0)
                 }
             }
-        }
-    }
-
-    fn event(
-        &mut self, 
-        state: &mut Self::State, 
-        _: Rect, 
-        _: MousePosition,
-        event: Event,
-        _: bool
-    ) -> Capture {
-        let mut capture = Capture::None;
-
-        *state = match *state {
-            GenericWidgetState::Idle => {
-                GenericWidgetState::Idle
-            },
-            GenericWidgetState::Hovered => {
-                if let Event::Press(Key::LeftMouseButton, _) = event {
-                    capture = Capture::CaptureFocus(MouseStyle::Arrow);
-                    GenericWidgetState::Clicked
-                } else {
-                    GenericWidgetState::Hovered
-                }
-            },
-            GenericWidgetState::Clicked => {
-                capture = Capture::CaptureFocus(MouseStyle::Arrow);
-                if let Event::Release(Key::LeftMouseButton, _) = event {
-                    GenericWidgetState::Idle
-                } else {
-                    GenericWidgetState::Clicked
-                }
-            },
-        };
-
-        capture
-    }
-
-    fn hover(
-        &mut self, 
-        state: &mut Self::State, 
-        layout: Rect, 
-        cursor: MousePosition
-    ) -> Hover {
-        if self.background.is_solid() {
-            if cursor.inside(&layout) {
-                if *state == GenericWidgetState::Idle {
-                    *state = GenericWidgetState::Hovered;
-                }
-                Hover::HoverIdle
-            } else {
-                if *state == GenericWidgetState::Hovered {
-                    *state = GenericWidgetState::Idle;
-                }
-                Hover::NoHover
-            }
-        } else {
-            Hover::NoHover
         }
     }
 

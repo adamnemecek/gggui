@@ -87,6 +87,7 @@ impl Style for Default {
     fn window(&self, w: f32, h: f32) -> WindowProperties {
         WindowProperties {
             default_size: Rect::from_wh(w, h),
+            minimum_size: Rect::from_wh(w, h),
             resizable: false,
             draggable: true,
             centered: true,
@@ -98,6 +99,7 @@ impl Style for Default {
     fn modal(&self, w: f32, h: f32) -> WindowProperties {
         WindowProperties {
             default_size: Rect::from_wh(w, h),
+            minimum_size: Rect::from_wh(w, h),
             resizable: false,
             draggable: true,
             centered: true,

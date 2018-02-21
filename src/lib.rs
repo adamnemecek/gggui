@@ -523,6 +523,15 @@ impl<'a> UiContext<'a> {
             self.ui.active_window = None;
         }
 
+        // drop focus if nothing was clicked
+        if let Capture::None = self.capture {
+            for event in self.events.iter() {
+                if let &Event::Press(Key::LeftMouseButton, _) = event {
+                    self.ui.focus = Some(("".to_string(), Box::new(())));
+                }
+            }
+        }
+
         let mut vtx = Vec::new();
         let mut cmd = Vec::new();
 

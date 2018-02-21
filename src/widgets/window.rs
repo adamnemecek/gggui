@@ -2,6 +2,7 @@ use super::*;
 
 pub struct WindowProperties {
     pub default_size: Rect,
+    pub minimum_size: Rect,
     pub resizable: bool,
     pub draggable: bool,
     pub centered: bool,
@@ -18,9 +19,9 @@ pub struct WindowController<'a> {
 pub enum WindowControllerState {
     Idle,
     HoverContent(f32, f32),
-    HoverFrame(f32, f32),
+    HoverFrame(MouseStyle),
     Drag(f32, f32),
-    Resize(f32, f32),
+    Resize(MouseStyle),
 }
 
 impl WidgetState for WindowControllerState { }
@@ -77,12 +78,12 @@ impl<'a> Widget for WindowController<'a> {
                     WindowControllerState::HoverContent(x, y)
                 }
             },
-            WindowControllerState::HoverFrame(x, y) => {
+            WindowControllerState::HoverFrame(anchor) => {
                 if let Event::Press(Key::LeftMouseButton, _) = event {
-                    capture = Capture::CaptureFocus(MouseStyle::Arrow);
-                    WindowControllerState::Resize(x, y)
+                    capture = Capture::CaptureFocus(anchor);
+                    WindowControllerState::Resize(anchor)
                 } else {
-                    WindowControllerState::HoverFrame(x, y)
+                    WindowControllerState::HoverFrame(anchor)
                 }
             },
             WindowControllerState::Drag(x, y) => {
@@ -98,12 +99,50 @@ impl<'a> Widget for WindowController<'a> {
                     WindowControllerState::Drag(x, y)
                 }
             },
-            WindowControllerState::Resize(x, y) => {
-                capture = Capture::CaptureFocus(MouseStyle::Arrow);
+            WindowControllerState::Resize(anchor) => {
+                capture = Capture::CaptureFocus(anchor);
+
+                let min_w = self.properties.minimum_size.width();
+                let min_h = self.properties.minimum_size.height();
+
+                match anchor {
+                    MouseStyle::ResizeN => {
+                        self.rect.top = cursor.y.min(self.rect.bottom - min_h);
+                    },
+                    MouseStyle::ResizeS => {
+                        self.rect.bottom = cursor.y.max(self.rect.top + min_h);
+                    },
+                    MouseStyle::ResizeW => {
+                        self.rect.left = cursor.x.min(self.rect.right - min_w);
+                    },
+                    MouseStyle::ResizeE => {
+                        self.rect.right = cursor.x.max(self.rect.left + min_w);
+                    },
+                    MouseStyle::ResizeNw => {
+                        self.rect.top = cursor.y.min(self.rect.bottom - min_h);
+                        self.rect.left = cursor.x.min(self.rect.right - min_w);
+                    },
+                    MouseStyle::ResizeNe => {
+                        self.rect.top = cursor.y.min(self.rect.bottom - min_h);
+                        self.rect.right = cursor.x.max(self.rect.left + min_w);
+                    },
+                    MouseStyle::ResizeSw => {
+                        self.rect.bottom = cursor.y.max(self.rect.top + min_h);
+                        self.rect.left = cursor.x.min(self.rect.right - min_w);
+                    },
+                    MouseStyle::ResizeSe => {
+                        self.rect.bottom = cursor.y.max(self.rect.top + min_h);
+                        self.rect.right = cursor.x.max(self.rect.left + min_w);
+                    },
+                    _ => {
+                        unreachable!();
+                    },
+                }
+
                 if let Event::Release(Key::LeftMouseButton, _) = event {
                     WindowControllerState::Idle
                 } else {
-                    WindowControllerState::Resize(x, y)
+                    WindowControllerState::Resize(anchor)
                 }
             },
         };
@@ -124,7 +163,7 @@ impl<'a> Widget for WindowController<'a> {
 
         let busy = match state {
             &mut WindowControllerState::Drag(_, _) |
-            &mut WindowControllerState::Resize(_, _) => true,
+            &mut WindowControllerState::Resize(_) => true,
             &mut _ => false,
         };
 
@@ -137,13 +176,33 @@ impl<'a> Widget for WindowController<'a> {
             }
             Hover::HoverIdle
         } else if cursor.inside(&layout) {
-            if !busy {
-                *state = WindowControllerState::HoverFrame(
-                    cursor.x - layout.left, 
-                    cursor.y - layout.top
-                );
+            if !busy && self.properties.resizable {
+                let hover_left = cursor.x < content.left + 4.0;
+                let hover_right = cursor.x > content.right - 4.0;
+                let hover_top = cursor.y < content.top + 4.0;
+                let hover_bottom = cursor.y > content.bottom - 4.0;
+                let anchor = match (hover_left, hover_right, hover_top, hover_bottom) {
+                    (true,  false, true,  false) => Some(MouseStyle::ResizeNw),
+                    (false, false, true,  false) => Some(MouseStyle::ResizeN),
+                    (false, true,  true,  false) => Some(MouseStyle::ResizeNe),
+                    (true,  false, false, false) => Some(MouseStyle::ResizeW),
+                    (false, true,  false, false) => Some(MouseStyle::ResizeE),
+                    (true,  false, false, true ) => Some(MouseStyle::ResizeSw),
+                    (false, false, false, true ) => Some(MouseStyle::ResizeS),
+                    (false, true,  false, true ) => Some(MouseStyle::ResizeSe),
+                    _ => None,
+                };
+
+                if anchor.is_some() {
+                    *state = WindowControllerState::HoverFrame(anchor.unwrap());
+                    Hover::HoverActive(anchor.unwrap())
+                } else {
+                    *state = WindowControllerState::Idle;
+                    Hover::NoHover
+                }
+            } else {
+                Hover::HoverIdle
             }
-            Hover::HoverActive(MouseStyle::ResizeNs)
         } else {
             if !busy {
                 *state = WindowControllerState::Idle;
