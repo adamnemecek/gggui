@@ -50,6 +50,11 @@ impl Flow {
         self
     }
 
+    pub fn background(mut self, background: Background) -> Self {
+        self.background = background;
+        self
+    }
+
     pub fn background_color(mut self, background: Color) -> Self {
         self.background = Background::Color(background);
         self

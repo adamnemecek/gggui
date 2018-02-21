@@ -11,6 +11,7 @@ pub struct Default {
     button_pressed: Patch,
     input: Patch,
     default_font: Font,
+    window: Patch,
 }
 
 impl Style for Default {
@@ -21,6 +22,7 @@ impl Style for Default {
             button_pressed: ui.get_patch(load_from_static_memory!("../../img/button_pressed.png")),
             input: ui.get_patch(load_from_static_memory!("../../img/input.png")),
             default_font: ui.get_font(load_from_static_memory!("../../img/default_font.ttf")),
+            window: ui.get_patch(load_from_static_memory!("../../img/window.png")),
         }
     }
 
@@ -79,6 +81,28 @@ impl Style for Default {
             font: self.default_font.clone(),
             size: 16.0,
             wrap: TextWrap::NoWrap,
+        }
+    }
+
+    fn window(&self, w: f32, h: f32) -> WindowProperties {
+        WindowProperties {
+            default_size: Rect::from_wh(w, h),
+            resizable: false,
+            draggable: true,
+            centered: true,
+            modal: false,
+            background: Background::Patch(self.window.clone()),
+        }
+    }
+
+    fn modal(&self, w: f32, h: f32) -> WindowProperties {
+        WindowProperties {
+            default_size: Rect::from_wh(w, h),
+            resizable: false,
+            draggable: true,
+            centered: true,
+            modal: true,
+            background: Background::Patch(self.window.clone()),
         }
     }
 }

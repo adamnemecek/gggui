@@ -12,6 +12,8 @@ pub trait Style {
     fn flow(&self) -> Flow;
     fn input<'a>(&self, txt: &'a mut String) -> Input<'a>;
     fn text(&self, txt: &str) -> Text;
+    fn window(&self, w: f32, h: f32) -> WindowProperties;
+    fn modal(&self, w: f32, h: f32) -> WindowProperties;
 }
 
 pub use self::default::*;

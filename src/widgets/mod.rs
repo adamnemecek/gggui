@@ -94,15 +94,13 @@ pub trait Widget {
         true
     }
 
-    fn window() -> bool {
-        false
-    }
-
     fn measure(
         &self, 
         state: &Self::State,
         layout: Option<Rect>
-    ) -> Option<Rect>;
+    ) -> Option<Rect> {
+        None
+    }
 
     fn layout(
         &mut self, 
@@ -115,19 +113,23 @@ pub trait Widget {
 
     fn event(
         &mut self, 
-        state: &mut Self::State, 
-        layout: Rect, 
-        cursor: MousePosition, 
-        event: Event,
-        is_focused: bool
-    ) -> Capture;
+        _state: &mut Self::State, 
+        _layout: Rect, 
+        _cursor: MousePosition, 
+        _event: Event,
+        _is_focused: bool
+    ) -> Capture {
+        Capture::None
+    }
 
     fn hover(
         &mut self, 
-        state: &mut Self::State, 
+        _state: &mut Self::State, 
         layout: Rect, 
         cursor: MousePosition
-    ) -> bool;
+    ) -> bool {
+        cursor.inside(&layout)
+    }
 
     fn predraw<F: FnMut(Primitive)>(
         &self, 
@@ -194,7 +196,7 @@ impl Layout for LayoutRoot {
 
     fn layout(&mut self, child: WidgetMeasure) -> Rect {
         child(None)
-            .unwrap_or(self.viewport.size())
+            .unwrap_or(self.viewport).size()
             .translate(self.viewport.left, self.viewport.top)
     }
 

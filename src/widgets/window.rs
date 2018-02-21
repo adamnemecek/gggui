@@ -1,79 +1,114 @@
 use super::*;
 
-pub struct Window {
-    flow: Flow,
-    modal: bool,
+pub struct WindowProperties {
+    pub default_size: Rect,
+    pub resizable: bool,
+    pub draggable: bool,
+    pub centered: bool,
+    pub modal: bool,
+    pub background: Background,
 }
 
-impl Window {
-    pub fn with_color(size: Rect, color: Color) -> Self {
-        Window {
-            flow: Flow::new().size(size).background_color(color),
-            modal: false,
+pub struct WindowController<'a> {
+    properties: WindowProperties,
+    rect: &'a mut Rect,
+}
+
+#[derive(Clone)]
+pub enum WindowControllerState {
+    Idle,
+    HoverContent(f32, f32),
+    HoverFrame(f32, f32),
+    Drag(f32, f32),
+    Resize(f32, f32),
+}
+
+impl WidgetState for WindowControllerState { }
+
+impl<'a> WindowController<'a> {
+    pub fn new(properties: WindowProperties, rect: &'a mut Rect) -> Self { 
+        WindowController {
+            properties,
+            rect,
         }
-    }
-
-    pub fn with_image(size: Rect, image: Image) -> Self {
-        Window {
-            flow: Flow::new().size(size).background_image(image),
-            modal: false,
-        }
-    }
-
-    pub fn with_patch(size: Rect, patch: Patch) -> Self {
-        Window {
-            flow: Flow::new().size(size).background_patch(patch),
-            modal: false,
-        }
-    }
-
-    pub fn style(mut self, style: FlowStyle) -> Self {
-        self.flow.style = style;
-        self
-    }
-
-    pub fn modal(mut self) -> Self {
-        self.modal = true;
-        self
     }
 }
 
-impl Widget for Window {
+impl<'a> Widget for WindowController<'a> {
     type Result = ();
-    type State = GenericWidgetState;
+    type State = WindowControllerState;
 
-    fn window() -> bool {
-        true
+    fn default() -> Self::State {
+        WindowControllerState::Idle
     }
-
-    fn enabled(&self, _: &Self::State) -> bool {
-        self.flow.enabled
-    }
-
-    fn default() -> Self::State { Flow::default() }
 
     fn measure(&self, _: &Self::State, _: Option<Rect>) -> Option<Rect> {
-        self.flow.size
+        Some(self.rect.clone())
     }
 
     fn layout(
         &mut self, 
-        state: &Self::State, 
+        _: &Self::State, 
         layout: Rect, 
-        child: WidgetMeasure
+        _: WidgetMeasure
     ) -> Rect {
-        self.flow.layout(state, layout, child)
+        self.properties.background.content_rect(layout)
     }
 
     fn event(
         &mut self, 
         state: &mut Self::State, 
-        layout: Rect, 
+        _: Rect, 
         cursor: MousePosition,
         event: Event,
-        is_focused: bool
+        _: bool
     ) -> Capture {
-        self.flow.event(state, layout, cursor, event, is_focused)
+        let mut capture = Capture::None;
+
+        *state = match *state {
+            WindowControllerState::Idle => {
+                WindowControllerState::Idle
+            },
+            WindowControllerState::HoverContent(x, y) => {
+                if let Event::Press(Key::LeftMouseButton, _) = event {
+                    capture = Capture::CaptureFocus;
+                    WindowControllerState::Drag(x, y)
+                } else {
+                    WindowControllerState::HoverContent(x, y)
+                }
+            },
+            WindowControllerState::HoverFrame(x, y) => {
+                if let Event::Press(Key::LeftMouseButton, _) = event {
+                    capture = Capture::CaptureFocus;
+                    WindowControllerState::Resize(x, y)
+                } else {
+                    WindowControllerState::HoverFrame(x, y)
+                }
+            },
+            WindowControllerState::Drag(x, y) => {
+                capture = Capture::CaptureFocus;
+
+                if self.properties.draggable {
+                    *self.rect = self.rect.size().translate(cursor.x - x, cursor.y - y);
+                }
+
+                if let Event::Release(Key::LeftMouseButton, _) = event {
+                    WindowControllerState::Idle
+                } else {
+                    WindowControllerState::Drag(x, y)
+                }
+            },
+            WindowControllerState::Resize(x, y) => {
+                capture = Capture::CaptureFocus;
+                if let Event::Release(Key::LeftMouseButton, _) = event {
+                    WindowControllerState::Idle
+                } else {
+                    WindowControllerState::Resize(x, y)
+                }
+            },
+        };
+
+        capture
     }
 
     fn hover(
@@ -82,24 +117,68 @@ impl Widget for Window {
         layout: Rect, 
         cursor: MousePosition
     ) -> bool {
-        self.flow.hover(state, layout, cursor)
+        let content = self.properties.background
+            .content_rect(layout)
+            .inset(1.0, 1.0)
+            .unwrap_or(layout);
+
+        let busy = match state {
+            &mut WindowControllerState::Drag(_, _) |
+            &mut WindowControllerState::Resize(_, _) => true,
+            &mut _ => false,
+        };
+
+        if cursor.inside(&content) {
+            if !busy {
+                *state = WindowControllerState::HoverContent(
+                    cursor.x - layout.left, 
+                    cursor.y - layout.top
+                );
+            }
+            true
+        } else if cursor.inside(&layout) {
+            if !busy {
+                *state = WindowControllerState::HoverFrame(
+                    cursor.x - layout.left, 
+                    cursor.y - layout.top
+                );
+            }
+            true
+        } else {
+            if !busy {
+                *state = WindowControllerState::Idle;
+            }
+            false
+        }
     }
 
-    fn predraw<F: FnMut(Primitive)>(
-        &self, 
-        state: &Self::State, 
-        layout: Rect, 
-        submit: F
-    ) {
-        self.flow.predraw(state, layout, submit)
+    fn predraw<F: FnMut(Primitive)>(&self, _state: &Self::State, layout: Rect, mut submit: F) { 
+        match &self.properties.background {
+            &Background::None => (),
+            &Background::Color(ref color) => {
+                submit(Primitive::DrawRect(layout, *color));
+            },
+            &Background::Image(ref image) => {
+                submit(Primitive::DrawImage(image.clone(), layout, Color::white()));
+            },
+            &Background::Patch(ref patch) => {
+                submit(Primitive::Draw9(patch.clone(), layout, Color::white()));
+            },
+        }
     }
 
-    fn childs(&self, state: &Self::State, layout: Rect) -> ChildType {
-        self.flow.childs(state, layout)
+    fn childs(&self, _: &Self::State, layout: Rect) -> ChildType {
+        match &self.properties.background {
+            &Background::Patch(ref patch) => {
+                ChildType::Intersect(patch.content_rect(layout))
+            },
+            &_ => {
+                ChildType::Intersect(layout)
+            },
+        }
     }
 
-    fn result(self, _: &Self::State) -> Self::Result {
+    fn result(self, _state: &Self::State) -> Self::Result {
         ()
     }
-
 }

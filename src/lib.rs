@@ -233,10 +233,30 @@ impl<'a> UiContext<'a> {
     pub fn window<
         F: FnOnce(&mut UiContext)
     > (
+        &mut self,
+        id: &str,
+        properties: WindowProperties,
+        children: F
+    ) {
+        self.custom_window(
+            id, 
+            properties.default_size, 
+            properties.modal, 
+            properties.centered,
+            |ctx, win| {
+                ctx.nested(id, WindowController::new(properties, win), children);
+            }
+        );
+    }
+
+    pub fn custom_window<
+        F: FnOnce(&mut UiContext, &mut Rect)
+    > (
         &mut self, 
         id: &str, 
-        size: Rect, 
+        default_size: Rect, 
         modal: bool, 
+        centered: bool,
         children: F
     ) {
         let window_position = self.ui.windows.iter().position(|w| w.id == id);
@@ -258,6 +278,23 @@ impl<'a> UiContext<'a> {
         let enabled = self.ui.active_window.as_ref().map_or(!occluded, |w| w.id == id);
 
         let (win, capture) = {
+            let mut size = self.ui.active_window.as_ref()
+                .and_then(|w| if w.id == id { Some(w.rect) } else { None })
+                .or_else(|| {
+                    let default_size = if centered {
+                        let xy = (
+                            (self.viewport.left+self.viewport.right-default_size.width()) * 0.5,
+                            (self.viewport.top+self.viewport.bottom-default_size.height()) * 0.5
+                        );
+                        default_size.size().translate(xy.0, xy.1)
+                    } else {
+                        default_size
+                    };
+                    window_position.as_ref()
+                        .and_then(|i| Some(self.ui.windows[*i].rect))
+                        .or(Some(default_size))
+                }).unwrap();
+
             let mut sub = UiContext {
                 ui: self.ui,
                 drawlist: Vec::new(),
@@ -271,7 +308,7 @@ impl<'a> UiContext<'a> {
             };
 
             sub.drawlist.push(Primitive::PushClip(self.viewport));
-            children(&mut sub);
+            children(&mut sub, &mut size);
             sub.drawlist.append(&mut sub.drawlist_sub);
             sub.drawlist.push(Primitive::PopClip);
 
@@ -308,15 +345,15 @@ impl<'a> UiContext<'a> {
         }
     }
 
-    pub fn ui<W: Widget>(&mut self, id: &str, widget: W) -> W::Result {
-        self.ui_with_inner(id, widget, |_ui|{ })
+    pub fn simple<W: Widget>(&mut self, id: &str, widget: W) -> W::Result {
+        self.nested(id, widget, |_ui|{ })
     }
 
-    pub fn ui_stateless<W: Widget>(&mut self, widget: W) -> W::Result {
-        self.ui_with_inner("", widget, |_ui|{ })
+    pub fn stateless<W: Widget>(&mut self, widget: W) -> W::Result {
+        self.nested("", widget, |_ui|{ })
     }
 
-    pub fn ui_with_inner<
+    pub fn nested<
         W: Widget, 
         F: FnOnce(&mut UiContext)
     > (
@@ -328,7 +365,7 @@ impl<'a> UiContext<'a> {
         let mut state = self.ui.get_state::<W>(id);
         let mut is_focused = self.ui.focus.as_ref().map_or(false, |f| f.0 == id);
 
-        let enabled = (self.enabled && widget.enabled(&state)) || W::window();
+        let enabled = self.enabled && widget.enabled(&state);
 
         //--------------------------------------------------------------------------------------//
         // handle layouting
@@ -358,7 +395,7 @@ impl<'a> UiContext<'a> {
         }
 
         //--------------------------------------------------------------------------------------//
-        // handle events, children and rendering
+        // hovering + predraw
         let is_hovered = if !enabled {
             false
         } else if is_focused || self.ui.previous_capture == Capture::None {
@@ -369,6 +406,8 @@ impl<'a> UiContext<'a> {
 
         widget.predraw(&state, layout, |p| self.drawlist.push(p));
 
+        //--------------------------------------------------------------------------------------//
+        // handle children
         let child_capture = match widget.childs(&state, layout) {
             ChildType::None => Capture::None,
             child_type => {
@@ -409,6 +448,8 @@ impl<'a> UiContext<'a> {
             },
         };
 
+        //--------------------------------------------------------------------------------------//
+        // handle events
         if child_capture == Capture::None && enabled {
             if is_hovered || is_focused {
                 for event in self.events.iter() {
@@ -477,43 +518,86 @@ impl<'a> UiContext<'a> {
             draw_lists.push(replace(&mut window.drawlist, vec![]));
         }
 
+        let vp = self.viewport.clone();
+        let validate_clip = |clip: Rect| {
+            let v = Rect { 
+                left: clip.left.max(0.0).min(vp.right), 
+                top: clip.top.max(0.0).min(vp.bottom), 
+                right: clip.right.max(0.0).min(vp.right),
+                bottom: clip.bottom.max(0.0).min(vp.bottom)
+            };
+            if v.width() > 0.0 && v.height() > 0.0 {
+                Some(v)
+            } else {
+                None
+            }
+        };
+
+        let mut draw_enabled = true;
+
         for primitive in draw_lists.into_iter().flat_map(|d| d) {
             match primitive {
                 Primitive::PushClip(scissor) => {
                     scissors.push(scissor);
 
-                    current_command
-                        .append(Command::Clip{ scissor })
-                        .and_then(|c| Some(cmd.push(c)));
+                    draw_enabled = validate_clip(scissor).map_or_else(
+                        | | false, 
+                        |s| {
+                            current_command
+                                .append(Command::Clip{ scissor: s })
+                                .and_then(|c| Some(cmd.push(c)));
+
+                            true
+                        }
+                    );
                 },
 
                 Primitive::PopClip => {
                     scissors.pop();
                     let scissor = scissors[scissors.len()-1];
 
-                    current_command
-                        .append(Command::Clip{ scissor })
-                        .and_then(|c| Some(cmd.push(c)));
+                    draw_enabled = validate_clip(scissor).map_or_else(
+                        | | false, 
+                        |s| {
+                            current_command
+                                .append(Command::Clip{ scissor: s })
+                                .and_then(|c| Some(cmd.push(c)));
+
+                            true
+                        }
+                    );
                 },
 
-                Primitive::DrawRect(r, color) => {
+                Primitive::DrawRect(r, color) => if draw_enabled {
                     let r = r.to_device_coordinates(self.viewport);
                     let color = [color.r, color.g, color.b, color.a];
                     let mode = 2;
                     let offset = vtx.len();
-                    vtx.push(Vertex{ pos: [r.left, r.top],     uv: [0.0; 2], color, mode });
-                    vtx.push(Vertex{ pos: [r.right, r.top],    uv: [0.0; 2], color, mode });
-                    vtx.push(Vertex{ pos: [r.right, r.bottom], uv: [0.0; 2], color, mode });
-                    vtx.push(Vertex{ pos: [r.left, r.top],     uv: [0.0; 2], color, mode });
-                    vtx.push(Vertex{ pos: [r.right, r.bottom], uv: [0.0; 2], color, mode });
-                    vtx.push(Vertex{ pos: [r.left, r.bottom],  uv: [0.0; 2], color, mode });
+                    vtx.push(Vertex{ 
+                        pos: [r.left, r.top],     uv: [0.0; 2], color, mode 
+                    });
+                    vtx.push(Vertex{ 
+                        pos: [r.right, r.top],    uv: [0.0; 2], color, mode 
+                    });
+                    vtx.push(Vertex{ 
+                        pos: [r.right, r.bottom], uv: [0.0; 2], color, mode 
+                    });
+                    vtx.push(Vertex{ 
+                        pos: [r.left, r.top],     uv: [0.0; 2], color, mode 
+                    });
+                    vtx.push(Vertex{ 
+                        pos: [r.right, r.bottom], uv: [0.0; 2], color, mode 
+                    });
+                    vtx.push(Vertex{ 
+                        pos: [r.left, r.bottom],  uv: [0.0; 2], color, mode 
+                    });
 
                     current_command
                         .append(Command::Colored{ offset, count: 6 })
                         .and_then(|c| Some(cmd.push(c)));
                 },
 
-                Primitive::DrawText(text, rect, color) => {
+                Primitive::DrawText(text, rect, color) => if draw_enabled {
                     let color = [color.r, color.g, color.b, color.a];
                     let mode = 0;
                     let offset = vtx.len();
@@ -524,12 +608,24 @@ impl<'a> UiContext<'a> {
                         rect,
                         |uv, pos| {
                             let rc = pos.to_device_coordinates(vp);
-                            vtx.push(Vertex{ pos: [rc.left, rc.top],     uv: uv.pt(0.0, 0.0), color, mode });
-                            vtx.push(Vertex{ pos: [rc.right, rc.top],    uv: uv.pt(1.0, 0.0), color, mode });
-                            vtx.push(Vertex{ pos: [rc.right, rc.bottom], uv: uv.pt(1.0, 1.0), color, mode });
-                            vtx.push(Vertex{ pos: [rc.left, rc.top],     uv: uv.pt(0.0, 0.0), color, mode });
-                            vtx.push(Vertex{ pos: [rc.right, rc.bottom], uv: uv.pt(1.0, 1.0), color, mode });
-                            vtx.push(Vertex{ pos: [rc.left, rc.bottom],  uv: uv.pt(0.0, 1.0), color, mode });
+                            vtx.push(Vertex{ 
+                                pos: [rc.left, rc.top],     uv: uv.pt(0.0, 0.0), color, mode 
+                            });
+                            vtx.push(Vertex{ 
+                                pos: [rc.right, rc.top],    uv: uv.pt(1.0, 0.0), color, mode 
+                            });
+                            vtx.push(Vertex{ 
+                                pos: [rc.right, rc.bottom], uv: uv.pt(1.0, 1.0), color, mode 
+                            });
+                            vtx.push(Vertex{ 
+                                pos: [rc.left, rc.top],     uv: uv.pt(0.0, 0.0), color, mode 
+                            });
+                            vtx.push(Vertex{ 
+                                pos: [rc.right, rc.bottom], uv: uv.pt(1.0, 1.0), color, mode 
+                            });
+                            vtx.push(Vertex{ 
+                                pos: [rc.left, rc.bottom],  uv: uv.pt(0.0, 1.0), color, mode 
+                            });
                         }
                     );
 
@@ -541,7 +637,7 @@ impl<'a> UiContext<'a> {
                         .and_then(|c| Some(cmd.push(c)));
                 },
 
-                Primitive::Draw9(patch, rect, color) => {
+                Primitive::Draw9(patch, rect, color) => if draw_enabled {
                     let uv = patch.image.texcoords;
                     let color = [color.r, color.g, color.b, color.a];
                     let mode = 1;
@@ -557,12 +653,24 @@ impl<'a> UiContext<'a> {
                                 bottom: y.1 + rect.top,
                             }.to_device_coordinates(vp);
 
-                            vtx.push(Vertex{ pos: [rc.left, rc.top],     uv: uv.pt(u.0, v.0), color, mode });
-                            vtx.push(Vertex{ pos: [rc.right, rc.top],    uv: uv.pt(u.1, v.0), color, mode });
-                            vtx.push(Vertex{ pos: [rc.right, rc.bottom], uv: uv.pt(u.1, v.1), color, mode });
-                            vtx.push(Vertex{ pos: [rc.left, rc.top],     uv: uv.pt(u.0, v.0), color, mode });
-                            vtx.push(Vertex{ pos: [rc.right, rc.bottom], uv: uv.pt(u.1, v.1), color, mode });
-                            vtx.push(Vertex{ pos: [rc.left, rc.bottom],  uv: uv.pt(u.0, v.1), color, mode });
+                            vtx.push(Vertex{ 
+                                pos: [rc.left, rc.top],     uv: uv.pt(u.0, v.0), color, mode 
+                            });
+                            vtx.push(Vertex{ 
+                                pos: [rc.right, rc.top],    uv: uv.pt(u.1, v.0), color, mode 
+                            });
+                            vtx.push(Vertex{ 
+                                pos: [rc.right, rc.bottom], uv: uv.pt(u.1, v.1), color, mode 
+                            });
+                            vtx.push(Vertex{ 
+                                pos: [rc.left, rc.top],     uv: uv.pt(u.0, v.0), color, mode 
+                            });
+                            vtx.push(Vertex{ 
+                                pos: [rc.right, rc.bottom], uv: uv.pt(u.1, v.1), color, mode 
+                            });
+                            vtx.push(Vertex{ 
+                                pos: [rc.left, rc.bottom],  uv: uv.pt(u.0, v.1), color, mode 
+                            });
                         });
                     });
 
@@ -575,19 +683,31 @@ impl<'a> UiContext<'a> {
                         .and_then(|c| Some(cmd.push(c)));
                 },
 
-                Primitive::DrawImage(image, r, color) => {
+                Primitive::DrawImage(image, r, color) => if draw_enabled {
                     let r = r.to_device_coordinates(self.viewport);
                     let uv = image.texcoords;
                     let color = [color.r, color.g, color.b, color.a];
                     let mode = 1;
                     let offset = vtx.len();
 
-                    vtx.push(Vertex{ pos: [r.left, r.top],     uv: [uv.left, uv.top],     color, mode });
-                    vtx.push(Vertex{ pos: [r.right, r.top],    uv: [uv.right, uv.top],    color, mode });
-                    vtx.push(Vertex{ pos: [r.right, r.bottom], uv: [uv.right, uv.bottom], color, mode });
-                    vtx.push(Vertex{ pos: [r.left, r.top],     uv: [uv.left, uv.top],     color, mode });
-                    vtx.push(Vertex{ pos: [r.right, r.bottom], uv: [uv.right, uv.bottom], color, mode });
-                    vtx.push(Vertex{ pos: [r.left, r.bottom],  uv: [uv.left, uv.bottom],  color, mode });
+                    vtx.push(Vertex{ 
+                        pos: [r.left, r.top],     uv: [uv.left, uv.top],     color, mode 
+                    });
+                    vtx.push(Vertex{ 
+                        pos: [r.right, r.top],    uv: [uv.right, uv.top],    color, mode 
+                    });
+                    vtx.push(Vertex{ 
+                        pos: [r.right, r.bottom], uv: [uv.right, uv.bottom], color, mode 
+                    });
+                    vtx.push(Vertex{ 
+                        pos: [r.left, r.top],     uv: [uv.left, uv.top],     color, mode 
+                    });
+                    vtx.push(Vertex{ 
+                        pos: [r.right, r.bottom], uv: [uv.right, uv.bottom], color, mode 
+                    });
+                    vtx.push(Vertex{ 
+                        pos: [r.left, r.bottom],  uv: [uv.left, uv.bottom],  color, mode 
+                    });
 
                     current_command
                         .append(Command::Textured{ texture: image.texture, offset, count: 6 })

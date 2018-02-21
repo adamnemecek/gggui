@@ -31,3 +31,12 @@ pub enum Background {
     Image(Image),
     Patch(Patch),
 }
+
+impl Background {
+    pub fn content_rect(&self, span: Rect) -> Rect {
+        match self {
+            &Background::Patch(ref patch) => patch.content_rect(span),
+            &_ => span,
+        }
+    }
+}

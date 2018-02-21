@@ -81,6 +81,28 @@ impl Rect {
         }
     }
 
+    pub fn inset(&self, x: f32, y: f32) -> Option<Rect> {
+        if self.width() > y*2.0 && self.height() > x*2.0 {
+            Some(Rect {
+                left: self.left + x,
+                top: self.top + y,
+                right: self.right - x, 
+                bottom: self.bottom - y,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn outset(&self, x: f32, y: f32) -> Rect {
+        Rect {
+            left: self.left - x,
+            top: self.top - y,
+            right: self.right + x, 
+            bottom: self.bottom + y,
+        }
+    }
+
     pub fn size(&self) -> Rect {
         Rect {
             left: 0.0,
