@@ -71,7 +71,7 @@ impl<'a> Widget for WindowController<'a> {
             },
             WindowControllerState::HoverContent(x, y) => {
                 if let Event::Press(Key::LeftMouseButton, _) = event {
-                    capture = Capture::CaptureFocus;
+                    capture = Capture::CaptureFocus(MouseStyle::Arrow);
                     WindowControllerState::Drag(x, y)
                 } else {
                     WindowControllerState::HoverContent(x, y)
@@ -79,14 +79,14 @@ impl<'a> Widget for WindowController<'a> {
             },
             WindowControllerState::HoverFrame(x, y) => {
                 if let Event::Press(Key::LeftMouseButton, _) = event {
-                    capture = Capture::CaptureFocus;
+                    capture = Capture::CaptureFocus(MouseStyle::Arrow);
                     WindowControllerState::Resize(x, y)
                 } else {
                     WindowControllerState::HoverFrame(x, y)
                 }
             },
             WindowControllerState::Drag(x, y) => {
-                capture = Capture::CaptureFocus;
+                capture = Capture::CaptureFocus(MouseStyle::Arrow);
 
                 if self.properties.draggable {
                     *self.rect = self.rect.size().translate(cursor.x - x, cursor.y - y);
@@ -99,7 +99,7 @@ impl<'a> Widget for WindowController<'a> {
                 }
             },
             WindowControllerState::Resize(x, y) => {
-                capture = Capture::CaptureFocus;
+                capture = Capture::CaptureFocus(MouseStyle::Arrow);
                 if let Event::Release(Key::LeftMouseButton, _) = event {
                     WindowControllerState::Idle
                 } else {
@@ -116,7 +116,7 @@ impl<'a> Widget for WindowController<'a> {
         state: &mut Self::State, 
         layout: Rect, 
         cursor: MousePosition
-    ) -> bool {
+    ) -> Hover {
         let content = self.properties.background
             .content_rect(layout)
             .inset(1.0, 1.0)
@@ -135,7 +135,7 @@ impl<'a> Widget for WindowController<'a> {
                     cursor.y - layout.top
                 );
             }
-            true
+            Hover::HoverIdle
         } else if cursor.inside(&layout) {
             if !busy {
                 *state = WindowControllerState::HoverFrame(
@@ -143,12 +143,12 @@ impl<'a> Widget for WindowController<'a> {
                     cursor.y - layout.top
                 );
             }
-            true
+            Hover::HoverActive(MouseStyle::ResizeNs)
         } else {
             if !busy {
                 *state = WindowControllerState::Idle;
             }
-            false
+            Hover::NoHover
         }
     }
 

@@ -39,4 +39,11 @@ impl Background {
             &_ => span,
         }
     }
+
+    pub fn is_solid(&self) -> bool {
+        match self {
+            &Background::None => false,
+            &_ => true,
+        }
+    }
 }

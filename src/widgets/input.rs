@@ -103,7 +103,7 @@ impl<'a> Widget for Input<'a> {
             },
             InputState::Hovered => {
                 if let Event::Press(Key::LeftMouseButton, _) = event {
-                    capture = Capture::CaptureFocus;
+                    capture = Capture::CaptureFocus(MouseStyle::Text);
                     let hit = text.hitdetect(relative_cursor, content);
                     InputState::Selecting(hit, hit, Instant::now())
                 } else {
@@ -111,7 +111,7 @@ impl<'a> Widget for Input<'a> {
                 }
             },
             InputState::Selecting(from, to, since) => {
-                capture = Capture::CaptureFocus;
+                capture = Capture::CaptureFocus(MouseStyle::Text);
                 if let Event::Release(Key::LeftMouseButton, _) = event {
                     InputState::Selected(from, to, since)
                 } else {
@@ -127,7 +127,7 @@ impl<'a> Widget for Input<'a> {
                 match event {
                     Event::Press(Key::LeftMouseButton, _) => {
                         if cursor.inside(&layout) {
-                            capture = Capture::CaptureFocus;
+                            capture = Capture::CaptureFocus(MouseStyle::Text);
                             let hit = text.hitdetect(relative_cursor, content);
                             InputState::Selecting(hit, hit, Instant::now())
                         } else {
@@ -298,17 +298,17 @@ impl<'a> Widget for Input<'a> {
         state: &mut Self::State, 
         layout: Rect, 
         cursor: MousePosition
-    ) -> bool {
+    ) -> Hover {
         if cursor.inside(&layout) {
             if *state == InputState::Idle {
                 *state = InputState::Hovered;
             }
-            true
+            Hover::HoverActive(MouseStyle::Text)
         } else {
             if *state == InputState::Hovered {
                 *state = InputState::Idle;
             }
-            false
+            Hover::NoHover
         }
     }
 

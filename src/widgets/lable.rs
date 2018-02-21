@@ -21,27 +21,7 @@ impl Widget for Lable {
     fn measure(&self, _state: &Self::State, layout: Option<Rect>) -> Option<Rect> {
         Some(self.text.measure(layout))
     }
-
-    fn event(
-        &mut self, 
-        _: &mut Self::State, 
-        _: Rect, 
-        _: MousePosition,
-        _: Event,
-        _: bool
-    ) -> Capture {
-        Capture::None
-    }
-
-    fn hover(
-        &mut self, 
-        _: &mut Self::State, 
-        _: Rect, 
-        _: MousePosition
-    ) -> bool {
-        false
-    }
-
+    
     fn predraw<F: FnMut(Primitive)>(
         &self, 
         _: &Self::State, 

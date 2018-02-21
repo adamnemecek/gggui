@@ -65,6 +65,7 @@ pub struct UiContext<'a> {
     parent: Box<Layout+'a>,
     events: EventVec,
     capture: Capture,
+    mouse_style: Option<MouseStyle>,
     cursor: MousePosition,
     viewport: Rect,
     enabled: bool,
@@ -141,6 +142,7 @@ impl Ui {
             parent: Box::new(LayoutRoot{ viewport }),
             events: EventVec::from_vec(events),
             capture: Capture::None,
+            mouse_style: None,
             cursor: cursor,
             viewport: viewport,
             enabled: enabled,
@@ -224,6 +226,7 @@ impl<'a> UiContext<'a> {
             parent: parent,
             events: events,
             capture: self.capture,
+            mouse_style: None,
             cursor: cursor,
             viewport: self.viewport,
             enabled: enabled,
@@ -277,7 +280,7 @@ impl<'a> UiContext<'a> {
 
         let enabled = self.ui.active_window.as_ref().map_or(!occluded, |w| w.id == id);
 
-        let (win, capture) = {
+        let (win, capture, mouse_style) = {
             let mut size = self.ui.active_window.as_ref()
                 .and_then(|w| if w.id == id { Some(w.rect) } else { None })
                 .or_else(|| {
@@ -302,6 +305,7 @@ impl<'a> UiContext<'a> {
                 parent: Box::new(LayoutRoot{ viewport: size }),
                 events: self.events.clone(),
                 capture: Capture::None,
+                mouse_style: None,
                 cursor: self.cursor.expand(&size),
                 viewport: self.viewport,
                 enabled: enabled
@@ -318,7 +322,7 @@ impl<'a> UiContext<'a> {
                 id: id.to_string(),
                 updated: true,
                 modal: modal,
-            }, sub.capture)
+            }, sub.capture, sub.mouse_style)
         };
 
         if modal {
@@ -330,7 +334,7 @@ impl<'a> UiContext<'a> {
                 self.ui.focus.take();
             }
             self.ui.active_window = Some(win);
-        } else if capture == Capture::CaptureFocus {
+        } else if let Capture::CaptureFocus(_) = capture {
             self.ui.active_window = Some(win);
         } else {
             if let Some(i) = window_position {
@@ -342,6 +346,10 @@ impl<'a> UiContext<'a> {
 
         if capture != Capture::None {
             self.capture = capture;
+        }
+
+        if mouse_style.is_some() {
+            self.mouse_style = mouse_style;
         }
     }
 
@@ -396,20 +404,29 @@ impl<'a> UiContext<'a> {
 
         //--------------------------------------------------------------------------------------//
         // hovering + predraw
-        let is_hovered = if !enabled {
-            false
+        let hover = if !enabled {
+            Hover::HoverIdle
         } else if is_focused || self.ui.previous_capture == Capture::None {
             widget.hover(&mut state, layout, self.cursor)
         } else {
-            false
+            Hover::HoverIdle
+        };
+
+        let is_hovered = match hover {
+            Hover::NoHover => false,
+            Hover::HoverActive(mouse_style) => {
+                self.mouse_style = Some(mouse_style);
+                true
+            },
+            Hover::HoverIdle => true,
         };
 
         widget.predraw(&state, layout, |p| self.drawlist.push(p));
 
         //--------------------------------------------------------------------------------------//
         // handle children
-        let child_capture = match widget.childs(&state, layout) {
-            ChildType::None => Capture::None,
+        let (child_capture, child_mouse_style) = match widget.childs(&state, layout) {
+            ChildType::None => (Capture::None, None),
             child_type => {
                 let layouter = LayoutCell::new(&mut widget, &mut state, layout);
                 let events = self.events.clone();
@@ -419,8 +436,8 @@ impl<'a> UiContext<'a> {
                     _ => unreachable!(),
                 };
 
-                cursor.visibility.map_or(Capture::None, |vis| {
-                    let (capture, new_drawlist) = {
+                cursor.visibility.map_or((Capture::None, None), |vis| {
+                    let (capture, mouse_style, new_drawlist) = {
                         let mut sub = self.sub(
                             Box::new(layouter), 
                             events, 
@@ -434,7 +451,7 @@ impl<'a> UiContext<'a> {
                         sub.drawlist.append(&mut sub.drawlist_sub);
                         sub.drawlist.push(Primitive::PopClip);
 
-                        (sub.capture, sub.drawlist)
+                        (sub.capture, sub.mouse_style, sub.drawlist)
                     };
 
                     if drawlist_sub {
@@ -443,7 +460,7 @@ impl<'a> UiContext<'a> {
                         replace(&mut self.drawlist, new_drawlist);
                     }
 
-                    capture
+                    (capture, mouse_style)
                 })
             },
         };
@@ -454,15 +471,15 @@ impl<'a> UiContext<'a> {
             if is_hovered || is_focused {
                 for event in self.events.iter() {
                     match widget.event(&mut state, layout, self.cursor, event.clone(), is_focused) {
-                        Capture::CaptureFocus => {
+                        Capture::CaptureFocus(mouse_style) => {
                             if id != "" {
-                                self.capture = Capture::CaptureFocus;
+                                self.capture = Capture::CaptureFocus(mouse_style);
                                 is_focused = true;
                             }
                         },
-                        Capture::CaptureMouse => {
+                        Capture::CaptureMouse(mouse_style) => {
                             if id != "" {
-                                self.capture = Capture::CaptureMouse;
+                                self.capture = Capture::CaptureMouse(mouse_style);
                                 is_focused = true;
                             }
                         },
@@ -488,6 +505,10 @@ impl<'a> UiContext<'a> {
             self.ui.update_state::<W>(id, state.clone(), false);
         }
 
+        if child_mouse_style.is_some() {
+            self.mouse_style = child_mouse_style;
+        }
+
         widget.postdraw(&state, layout, |p| self.drawlist.push(p));
         if W::tabstop() && is_focused && enabled {
             self.drawlist.push(Primitive::DrawRect(layout, Color::white().with_alpha(0.16)));
@@ -495,7 +516,7 @@ impl<'a> UiContext<'a> {
         widget.result(&state)
     }
 
-    pub fn draw(self) -> DrawList {
+    pub fn finish(self) -> (DrawList, MouseStyle, MouseMode) {
         self.ui.previous_capture = self.capture;
         self.ui.windows.retain(|w| w.updated);
         if let Some(&Window{ updated: false, .. }) = self.ui.active_window.as_ref() {
@@ -719,10 +740,17 @@ impl<'a> UiContext<'a> {
         // Flush any commands that are not finalized
         current_command.flush().and_then(|c| Some(cmd.push(c)));
 
-        DrawList {
+        // Resolve mouse mode and style for current frame
+        let (mouse_style, mouse_mode) = match self.capture {
+            Capture::CaptureFocus(style) => (style, MouseMode::Normal),
+            Capture::CaptureMouse(style) => (style, MouseMode::Confined),
+            _ => (self.mouse_style.unwrap_or(MouseStyle::Arrow), MouseMode::Normal)
+        };
+
+        (DrawList {
             updates: self.ui.cache.take_updates(),
             vertices: vtx,
             commands: cmd
-        }
+        }, mouse_style, mouse_mode)
     }
 }

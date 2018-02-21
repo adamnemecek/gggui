@@ -321,14 +321,14 @@ impl Widget for Flow {
             },
             GenericWidgetState::Hovered => {
                 if let Event::Press(Key::LeftMouseButton, _) = event {
-                    capture = Capture::CaptureFocus;
+                    capture = Capture::CaptureFocus(MouseStyle::Arrow);
                     GenericWidgetState::Clicked
                 } else {
                     GenericWidgetState::Hovered
                 }
             },
             GenericWidgetState::Clicked => {
-                capture = Capture::CaptureFocus;
+                capture = Capture::CaptureFocus(MouseStyle::Arrow);
                 if let Event::Release(Key::LeftMouseButton, _) = event {
                     GenericWidgetState::Idle
                 } else {
@@ -345,17 +345,21 @@ impl Widget for Flow {
         state: &mut Self::State, 
         layout: Rect, 
         cursor: MousePosition
-    ) -> bool {
-        if cursor.inside(&layout) {
-            if *state == GenericWidgetState::Idle {
-                *state = GenericWidgetState::Hovered;
+    ) -> Hover {
+        if self.background.is_solid() {
+            if cursor.inside(&layout) {
+                if *state == GenericWidgetState::Idle {
+                    *state = GenericWidgetState::Hovered;
+                }
+                Hover::HoverIdle
+            } else {
+                if *state == GenericWidgetState::Hovered {
+                    *state = GenericWidgetState::Idle;
+                }
+                Hover::NoHover
             }
-            true
         } else {
-            if *state == GenericWidgetState::Hovered {
-                *state = GenericWidgetState::Idle;
-            }
-            false
+            Hover::NoHover
         }
     }
 

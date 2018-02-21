@@ -77,7 +77,7 @@ impl Widget for Button {
             ButtonState::Unpressed => {
                 if is_focused {
                     if let Event::Press(Key::Space, _) = event {
-                        capture = Capture::CaptureFocus;
+                        capture = Capture::CaptureFocus(MouseStyle::ArrowClicking);
                         ButtonState::Pressed
                     } else {
                         ButtonState::Unpressed
@@ -88,18 +88,18 @@ impl Widget for Button {
             },
             ButtonState::Hovered => {
                 if let Event::Press(Key::LeftMouseButton, _) = event {
-                    capture = Capture::CaptureFocus;
+                    capture = Capture::CaptureFocus(MouseStyle::ArrowClicking);
                     ButtonState::Pressed
                 } else {
                     ButtonState::Hovered
                 }
             },
             ButtonState::Pressed => {
-                capture = Capture::CaptureFocus;
+                capture = Capture::CaptureFocus(MouseStyle::ArrowClicking);
                 match event {
                     Event::Release(Key::LeftMouseButton, _) => {
                         if cursor.inside(&layout) {
-                           ButtonState::Triggered
+                            ButtonState::Triggered
                         } else {
                             ButtonState::Unpressed
                         }
@@ -125,7 +125,7 @@ impl Widget for Button {
         state: &mut Self::State, 
         layout: Rect, 
         cursor: MousePosition
-    ) -> bool {
+    ) -> Hover {
         if *state == ButtonState::Triggered {
             *state = ButtonState::Unpressed;
         }
@@ -134,12 +134,12 @@ impl Widget for Button {
             if *state == ButtonState::Unpressed {
                 *state = ButtonState::Hovered;
             }
-            true
+            Hover::HoverActive(MouseStyle::ArrowClickable)
         } else {
             if *state == ButtonState::Hovered {
                 *state = ButtonState::Unpressed;
             }
-            false
+            Hover::NoHover
         }
     }
 

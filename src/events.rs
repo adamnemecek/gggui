@@ -65,15 +65,44 @@ pub enum Event {
 
 #[derive(Clone,Copy,PartialEq,Debug)]
 pub enum MouseMode {
-    Pointer,
-    FirstPerson,
+    Normal,
+    Confined,
+    Locked(f32, f32),
 }
 
-#[derive(Clone,Copy,PartialEq,Debug)]
+#[derive(Clone,Copy,PartialEq)]
+pub enum Hover {
+    HoverIdle,
+    HoverActive(MouseStyle),
+    NoHover,
+}
+
+#[derive(Clone,Copy,PartialEq)]
 pub enum Capture {
-    CaptureFocus,
-    CaptureMouse,
+    CaptureFocus(MouseStyle),
+    CaptureMouse(MouseStyle),
     FocusNext,
     FocusPrev,
     None,
+}
+
+#[derive(Clone,Copy,PartialEq)]
+pub enum MouseStyle {
+    Invisible,
+    Arrow,
+    ArrowClickable,
+    ArrowClicking,
+    Text,
+    ResizeN,
+    ResizeS,
+    ResizeW,
+    ResizeE,
+    ResizeNw,
+    ResizeNe,
+    ResizeSw,
+    ResizeSe,
+    ResizeWe,
+    ResizeNs,
+    ResizeNwse,
+    ResizeNesw,
 }

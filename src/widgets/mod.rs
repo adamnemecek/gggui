@@ -96,8 +96,8 @@ pub trait Widget {
 
     fn measure(
         &self, 
-        state: &Self::State,
-        layout: Option<Rect>
+        _state: &Self::State,
+        _layout: Option<Rect>
     ) -> Option<Rect> {
         None
     }
@@ -125,10 +125,10 @@ pub trait Widget {
     fn hover(
         &mut self, 
         _state: &mut Self::State, 
-        layout: Rect, 
-        cursor: MousePosition
-    ) -> bool {
-        cursor.inside(&layout)
+        _layout: Rect, 
+        _cursor: MousePosition
+    ) -> Hover {
+        Hover::NoHover
     }
 
     fn predraw<F: FnMut(Primitive)>(

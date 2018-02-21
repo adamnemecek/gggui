@@ -59,6 +59,28 @@ pub fn convert_event(ev: winit::Event) -> Option<Event> {
     }
 }
 
+pub fn convert_mouse_style(style: MouseStyle) -> winit::MouseCursor {
+    match style {
+        MouseStyle::Invisible => winit::MouseCursor::NoneCursor,
+        MouseStyle::Arrow => winit::MouseCursor::Arrow,
+        MouseStyle::ArrowClickable => winit::MouseCursor::Arrow,
+        MouseStyle::ArrowClicking => winit::MouseCursor::Arrow,
+        MouseStyle::Text => winit::MouseCursor::Text,
+        MouseStyle::ResizeN => winit::MouseCursor::NResize,
+        MouseStyle::ResizeS => winit::MouseCursor::SResize,
+        MouseStyle::ResizeW => winit::MouseCursor::WResize,
+        MouseStyle::ResizeE => winit::MouseCursor::EResize,
+        MouseStyle::ResizeNw => winit::MouseCursor::NwResize,
+        MouseStyle::ResizeNe => winit::MouseCursor::NeResize,
+        MouseStyle::ResizeSw => winit::MouseCursor::SwResize,
+        MouseStyle::ResizeSe => winit::MouseCursor::SeResize,
+        MouseStyle::ResizeWe => winit::MouseCursor::EwResize,
+        MouseStyle::ResizeNs => winit::MouseCursor::NsResize,
+        MouseStyle::ResizeNwse => winit::MouseCursor::NwseResize,
+        MouseStyle::ResizeNesw => winit::MouseCursor::NeswResize,
+    }
+}
+
 fn empty_mods() -> Modifiers {
     Modifiers {
         ctrl: false,
