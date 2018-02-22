@@ -32,7 +32,7 @@ pub struct Flow {
 impl Flow {
     pub fn new() -> Flow {
         Flow {
-            style: FlowStyle::LinearVertical(Align::Begin),
+            style: FlowStyle::Absolute,
             pad: 0.0,
             h_gap: 8.0,
             v_gap: 8.0,
@@ -102,8 +102,31 @@ impl Widget for Flow {
         self.enabled
     }
 
-    fn measure(&self, _state: &Self::State, _layout: Option<Rect>) -> Option<Rect> {
+    fn measure(&self, _state: &Self::State, layout: Option<Rect>) -> Option<Rect> {
+        let layout = layout.unwrap_or(Rect::from_wh(0.0, 0.0));
         self.size
+            .and_then(|s| Some(s))
+            .or_else(|| {
+                match self.style {
+                    FlowStyle::LinearHorizontal(Align::Begin) |
+                    FlowStyle::LinearVertical(Align::Begin) => 
+                        Some(Rect::from_wh(self.cursor.0, self.cursor.1)),
+
+                    FlowStyle::LinearHorizontal(_) =>
+                        Some(Rect::from_wh(self.cursor.0, layout.height())),
+
+                    FlowStyle::LinearVertical(_) => 
+                        Some(Rect::from_wh(layout.width(), self.cursor.1)),
+
+                    FlowStyle::GridHorizontal(_) => 
+                        Some(Rect::from_wh(layout.width(), self.cursor.1 + self.advance)),
+
+                    FlowStyle::GridVertical(_) => 
+                        Some(Rect::from_wh(self.cursor.0 + self.advance, layout.height())),
+
+                    _ => self.size,
+                }
+            })
     }
 
     fn estimate(
@@ -155,6 +178,7 @@ impl Widget for Flow {
                     }
                 });
 
+                self.cursor.0 = self.cursor.0.max(r.width());
                 self.cursor.1 += r.height() + self.v_gap;
                 r.round()
             },
@@ -189,6 +213,7 @@ impl Widget for Flow {
                 });
 
                 self.cursor.0 += r.width() + self.h_gap;
+                self.cursor.1 = self.cursor.1.max(r.height());
                 r.round()
             },
 
