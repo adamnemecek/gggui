@@ -12,6 +12,10 @@ pub struct Default {
     input: Patch,
     default_font: Font,
     window: Patch,
+    scroll_bg_h: Patch,
+    scroll_bg_v: Patch,
+    scroll_bar_h: Patch,
+    scroll_bar_v: Patch,
 }
 
 impl Style for Default {
@@ -23,6 +27,10 @@ impl Style for Default {
             input: ui.get_patch(load_from_static_memory!("../../img/input.png")),
             default_font: ui.get_font(load_from_static_memory!("../../img/default_font.ttf")),
             window: ui.get_patch(load_from_static_memory!("../../img/window.png")),
+            scroll_bg_h: ui.get_patch(load_from_static_memory!("../../img/scroll_bg.png")),
+            scroll_bg_v: ui.get_patch(load_from_static_memory!("../../img/scroll_bg.png")),
+            scroll_bar_h: ui.get_patch(load_from_static_memory!("../../img/scroll_bar.png")),
+            scroll_bar_v: ui.get_patch(load_from_static_memory!("../../img/scroll_bar.png")),
         }
     }
 
@@ -63,6 +71,16 @@ impl Style for Default {
 
     fn flow(&self) -> Flow {
         Flow::new()
+    }
+
+    fn scroll<'a>(&self, scroll: &'a mut (f32, f32)) -> Scroll<'a> {
+        Scroll::new(
+            scroll,
+            self.scroll_bg_h.clone(),
+            self.scroll_bg_v.clone(),
+            self.scroll_bar_h.clone(),
+            self.scroll_bar_v.clone(),
+        )
     }
 
     fn input<'a>(&self, txt: &'a mut String) -> Input<'a> {

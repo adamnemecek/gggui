@@ -25,6 +25,7 @@ pub enum Primitive {
     DrawImage(Image, Rect, Color),
 }
 
+#[derive(Clone)]
 pub enum Background {
     None,
     Color(Color),

@@ -3,12 +3,14 @@ use super::events::*;
 use downcast::Any;
 
 mod flow;
+mod scroll;
 mod button;
 mod input;
 mod lable;
 mod window;
 
 pub use self::flow::*;
+pub use self::scroll::*;
 pub use self::button::*;
 pub use self::input::*;
 pub use self::lable::*;
@@ -39,7 +41,9 @@ pub struct MousePosition {
 
 pub enum ChildType {
     Intersect(Rect),
+    IntersectInputOnly(Rect),
     Expand(Rect),
+    Overflow,
     None,
 }
 
@@ -76,6 +80,7 @@ impl WidgetState for () { }
 
 pub type WidgetMeasure<'a> = Box<Fn(Option<Rect>)->Option<Rect>+'a>;
 
+#[allow(unused_variables)]
 pub trait Widget {
     type Result;
     type State: WidgetState + Clone;
@@ -96,59 +101,68 @@ pub trait Widget {
 
     fn measure(
         &self, 
-        _state: &Self::State,
-        _layout: Option<Rect>
+        state: &Self::State,
+        layout: Option<Rect>
     ) -> Option<Rect> {
         None
     }
 
-    fn layout(
-        &mut self, 
-        _state: &Self::State, 
+    fn estimate(
+        &self, 
+        state: &Self::State, 
         layout: Rect, 
-        _child: WidgetMeasure
+        child: WidgetMeasure
     ) -> Rect {
         layout
     }
 
+    fn layout(
+        &mut self, 
+        state: &Self::State, 
+        layout: Rect, 
+        child: WidgetMeasure
+    ) -> Rect {
+        self.estimate(state, layout, child)
+    }
+
     fn event(
         &mut self, 
-        _state: &mut Self::State, 
-        _layout: Rect, 
-        _cursor: MousePosition, 
-        _event: Event,
-        _is_focused: bool
+        state: &mut Self::State, 
+        layout: Rect, 
+        cursor: MousePosition, 
+        event: Event,
+        is_focused: bool
     ) -> Capture {
         Capture::None
     }
 
     fn hover(
         &mut self, 
-        _state: &mut Self::State, 
-        _layout: Rect, 
-        _cursor: MousePosition
+        state: &mut Self::State, 
+        layout: Rect, 
+        cursor: MousePosition
     ) -> Hover {
         Hover::NoHover
     }
 
     fn predraw<F: FnMut(Primitive)>(
         &self, 
-        _state: &Self::State,
-        _layout: Rect, 
-        _submit: F) { 
+        state: &Self::State,
+        layout: Rect, 
+        submit: F) { 
     }
 
     fn postdraw<F: FnMut(Primitive)>(
         &self, 
-        _state: &Self::State, 
-        _layout: Rect, 
-        _submit: F) { 
+        state: &Self::State, 
+        layout: Rect, 
+        submit: F) { 
     }
 
     fn childs(
         &self, 
-        _state: &Self::State,
-        _layout: Rect,
+        state: &Self::State,
+        layout: Rect,
     ) -> ChildType {
         ChildType::None
     }
@@ -161,6 +175,7 @@ pub trait Widget {
 }
 
 pub trait Layout {
+    fn estimate(&self, child: WidgetMeasure) -> Rect;
     fn layout(&mut self, child: WidgetMeasure) -> Rect;
 }
 
@@ -185,19 +200,21 @@ impl<'a, W: Widget> LayoutCell<'a, W> {
 }
 
 impl<'a, W: Widget> Layout for LayoutCell<'a, W> {
-
+    fn estimate(&self, child: WidgetMeasure) -> Rect {
+        self.widget.estimate(self.state, self.layout, child)
+    }
     fn layout(&mut self, child: WidgetMeasure) -> Rect {
         self.widget.layout(self.state, self.layout, child)
     }
-
 }
 
 impl Layout for LayoutRoot {
-
-    fn layout(&mut self, child: WidgetMeasure) -> Rect {
+    fn estimate(&self, child: WidgetMeasure) -> Rect {
         child(None)
             .unwrap_or(self.viewport).size()
             .translate(self.viewport.left, self.viewport.top)
     }
-
+    fn layout(&mut self, child: WidgetMeasure) -> Rect {
+        self.estimate(child)
+    }
 }

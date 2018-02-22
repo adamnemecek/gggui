@@ -377,7 +377,7 @@ impl<'a> UiContext<'a> {
 
         //--------------------------------------------------------------------------------------//
         // handle layouting
-        let layout = self.parent.layout(Box::new(|layout| widget.measure(&state, layout)));
+        let layout = self.parent.estimate(Box::new(|layout| widget.measure(&state, layout)));
 
         //--------------------------------------------------------------------------------------//
         // handle tabstops
@@ -403,24 +403,10 @@ impl<'a> UiContext<'a> {
         }
 
         //--------------------------------------------------------------------------------------//
-        // hovering + predraw
-        let hover = if !enabled {
-            Hover::HoverIdle
-        } else if is_focused || self.ui.previous_capture == Capture::None {
-            widget.hover(&mut state, layout, self.cursor)
-        } else {
-            Hover::HoverIdle
-        };
-
-        let is_hovered = match hover {
-            Hover::NoHover => false,
-            Hover::HoverActive(mouse_style) => {
-                self.mouse_style = Some(mouse_style);
-                true
-            },
-            Hover::HoverIdle => true,
-        };
-
+        // hover for predraw + predraw
+        if enabled && (is_focused || self.ui.previous_capture == Capture::None) {
+            widget.hover(&mut state, layout, self.cursor);
+        }
         widget.predraw(&state, layout, |p| self.drawlist.push(p));
 
         //--------------------------------------------------------------------------------------//
@@ -430,9 +416,15 @@ impl<'a> UiContext<'a> {
             child_type => {
                 let layouter = LayoutCell::new(&mut widget, &mut state, layout);
                 let events = self.events.clone();
-                let (cursor, drawlist_sub) = match child_type {
-                    ChildType::Intersect(ref clip) => (self.cursor.sub(clip), false),
-                    ChildType::Expand(ref clip) => (self.cursor.expand(clip), true),
+                let (cursor, drawlist_sub, clip_vis) = match child_type {
+                    ChildType::Intersect(ref clip) => 
+                        (self.cursor.sub(clip), false, true),
+                    ChildType::IntersectInputOnly(ref clip) => 
+                        (self.cursor.sub(clip), false, false),
+                    ChildType::Expand(ref clip) => 
+                        (self.cursor.expand(clip), true, true),
+                    ChildType::Overflow =>
+                        (self.cursor, false, false),
                     _ => unreachable!(),
                 };
 
@@ -445,11 +437,16 @@ impl<'a> UiContext<'a> {
                             enabled,
                             drawlist_sub
                         );
-                            
-                        sub.drawlist.push(Primitive::PushClip(vis));
-                        children(&mut sub);
-                        sub.drawlist.append(&mut sub.drawlist_sub);
-                        sub.drawlist.push(Primitive::PopClip);
+                        
+                        if clip_vis {    
+                            sub.drawlist.push(Primitive::PushClip(vis));
+                            children(&mut sub);
+                            sub.drawlist.append(&mut sub.drawlist_sub);
+                            sub.drawlist.push(Primitive::PopClip);
+                        } else {
+                            children(&mut sub);
+                            sub.drawlist.append(&mut sub.drawlist_sub);
+                        }
 
                         (sub.capture, sub.mouse_style, sub.drawlist)
                     };
@@ -468,6 +465,21 @@ impl<'a> UiContext<'a> {
         //--------------------------------------------------------------------------------------//
         // handle events
         if child_capture == Capture::None && enabled {
+            let hover = if is_focused || self.ui.previous_capture == Capture::None {
+                widget.hover(&mut state, layout, self.cursor)
+            } else {
+                Hover::NoHover
+            };
+
+            let is_hovered = match hover {
+                Hover::NoHover => false,
+                Hover::HoverActive(mouse_style) => {
+                    self.mouse_style = Some(mouse_style);
+                    true
+                },
+                Hover::HoverIdle => true,
+            };
+
             if is_hovered || is_focused {
                 for event in self.events.iter() {
                     match widget.event(&mut state, layout, self.cursor, event.clone(), is_focused) {
@@ -513,6 +525,11 @@ impl<'a> UiContext<'a> {
         if W::tabstop() && is_focused && enabled {
             self.drawlist.push(Primitive::DrawRect(layout, Color::white().with_alpha(0.16)));
         }
+
+        // apply final layout. Parent will measure this widget again but now
+        //  we know how much content there is including children
+        self.parent.layout(Box::new(|layout| widget.measure(&state, layout)));
+
         widget.result(&state)
     }
 

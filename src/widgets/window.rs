@@ -1,5 +1,6 @@
 use super::*;
 
+#[derive(Clone)]
 pub struct WindowProperties {
     pub default_size: Rect,
     pub minimum_size: Rect,
@@ -47,8 +48,8 @@ impl<'a> Widget for WindowController<'a> {
         Some(self.rect.clone())
     }
 
-    fn layout(
-        &mut self, 
+    fn estimate(
+        &self, 
         _: &Self::State, 
         layout: Rect, 
         _: WidgetMeasure

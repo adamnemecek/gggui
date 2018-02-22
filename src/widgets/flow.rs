@@ -15,6 +15,7 @@ pub enum FlowStyle {
     Absolute,
 }
 
+#[derive(Clone)]
 pub struct Flow {
     pub style: FlowStyle,
     pub pad: f32,
@@ -103,6 +104,15 @@ impl Widget for Flow {
 
     fn measure(&self, _state: &Self::State, _layout: Option<Rect>) -> Option<Rect> {
         self.size
+    }
+
+    fn estimate(
+        &self,
+        state: &Self::State,
+        layout: Rect,
+        child: WidgetMeasure
+    ) -> Rect {
+        self.clone().layout(state, layout, child)
     }
 
     fn layout(
@@ -327,6 +337,9 @@ impl Widget for Flow {
         match &self.background {
             &Background::Patch(ref patch) => {
                 ChildType::Intersect(patch.content_rect(layout))
+            },
+            &Background::None => {
+                ChildType::Overflow
             },
             &_ => {
                 ChildType::Intersect(layout)
