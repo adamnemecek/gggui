@@ -103,7 +103,7 @@ impl Widget for Flow {
     }
 
     fn measure(&self, _state: &Self::State, layout: Option<Rect>) -> Option<Rect> {
-        let layout = layout.unwrap_or(Rect::from_wh(0.0, 0.0));
+        let layout = layout.or(self.size).unwrap_or(Rect::from_wh(0.0, 0.0));
         self.size
             .and_then(|s| Some(s))
             .or_else(|| {

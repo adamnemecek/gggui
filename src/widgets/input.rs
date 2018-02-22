@@ -13,6 +13,7 @@ pub enum InputState {
 pub struct Input<'a> {
     pub patch: Patch,
     pub size: Option<Rect>,
+    pub password: bool,
     buffer: &'a mut String,
     text: Option<Text>,
     focus: bool,
@@ -27,11 +28,17 @@ impl<'a> Input<'a> {
         text_size: f32, 
         text_color: Color
     ) -> Self {
-        let render_text = Text{ text: text.clone(), font, size: text_size, wrap: TextWrap::NoWrap };
+        let render_text = Text{ 
+            text: text.clone(), 
+            font: font, 
+            size: text_size, 
+            wrap: TextWrap::NoWrap 
+        };
 
         Input {
             patch,
             size: None,
+            password: false,
             buffer: text,
             text: Some(render_text),
             focus: false,
@@ -53,6 +60,24 @@ impl<'a> Input<'a> {
         self.focus = true;
         self
     }
+
+    pub fn password(mut self) -> Self {
+        self.password = true;
+        self.text.as_mut().unwrap().text = text_display(self.buffer, self.password);
+        self
+    }
+}
+
+fn text_display(buffer: &String, password: bool) -> String {
+    if password {
+        "\u{25cf}".repeat(buffer.chars().count())
+    } else {
+        buffer.clone()
+    }
+}
+
+fn codepoint(s: &String, char_index: usize) -> usize {
+    s.char_indices().skip(char_index).next().map_or(s.len(), |(i,_)| i)
 }
 
 impl WidgetState for InputState { }
@@ -96,7 +121,8 @@ impl<'a> Widget for Input<'a> {
         *state = match *state {
             InputState::Idle => {
                 if is_focused {
-                    InputState::Selected(self.buffer.len(), self.buffer.len(), Instant::now())
+                    let count = self.buffer.chars().count();
+                    InputState::Selected(count, count, Instant::now())
                 } else {
                     InputState::Idle
                 }
@@ -141,15 +167,17 @@ impl<'a> Widget for Input<'a> {
                                 let (from, to) = (from.min(to), from.max(to));
 
                                 if to > from {
-                                    let tail = self.buffer.split_off(from);
-                                    self.buffer.push_str(tail.split_at(to-from).1);
-                                    text.text = self.buffer.clone();
+                                    let pt = codepoint(self.buffer, from);
+                                    let tail = self.buffer.split_off(pt);
+                                    self.buffer.push_str(tail.split_at(codepoint(&tail, to-from)).1);
+                                    text.text = text_display(self.buffer, self.password);
 
                                     InputState::Selected(from, from, Instant::now())
                                 } else if from > 0 {
-                                    let tail = self.buffer.split_off(from-1);
-                                    self.buffer.push_str(tail.split_at(1).1);
-                                    text.text = self.buffer.clone();
+                                    let pt = codepoint(self.buffer, from-1);
+                                    let tail = self.buffer.split_off(pt);
+                                    self.buffer.push_str(tail.split_at(codepoint(&tail, 1)).1);
+                                    text.text = text_display(self.buffer, self.password);
 
                                     InputState::Selected(from-1, from-1, Instant::now())
                                 } else {
@@ -159,13 +187,14 @@ impl<'a> Widget for Input<'a> {
                             '\x7f' => {
                                 let (from, to) = (from.min(to), from.max(to));
 
-                                let tail = self.buffer.split_off(from);
+                                let pt = codepoint(self.buffer, from);
+                                let tail = self.buffer.split_off(pt);
                                 if to > from {
-                                    self.buffer.push_str(tail.split_at(to-from).1);
+                                    self.buffer.push_str(tail.split_at(codepoint(&tail, to-from)).1);
                                 } else if tail.len() > 0 {
-                                    self.buffer.push_str(tail.split_at(1).1);
+                                    self.buffer.push_str(tail.split_at(codepoint(&tail, 1)).1);
                                 }
-                                text.text = self.buffer.clone();
+                                text.text = text_display(self.buffer, self.password);
 
                                 InputState::Selected(from, from, Instant::now())
                             },
@@ -174,14 +203,17 @@ impl<'a> Widget for Input<'a> {
                             } else {
                                 let (from, to) = (from.min(to), from.max(to));
 
-                                let mut tail = self.buffer.split_off(from);
+                                let pt = codepoint(self.buffer, from);
+                                let mut tail = self.buffer.split_off(pt);
                                 self.buffer.push(c);
                                 if to > from {
-                                    self.buffer.push_str(&tail.split_off(to-from));
+                                    let pt = codepoint(&tail, to-from);
+                                    self.buffer.push_str(&tail.split_off(pt));
                                 } else {
                                     self.buffer.push_str(&tail);
                                 }
-                                text.text = self.buffer.clone();
+                                text.text = text_display(self.buffer, self.password);
+
                                 InputState::Selected(from+1, from+1, Instant::now())
                             }
                         }
@@ -189,6 +221,7 @@ impl<'a> Widget for Input<'a> {
 
                     Event::Press(Key::C, Modifiers{ ctrl: true, alt: false, shift: false, logo: false }) => {
                         let (a, b) = (from.min(to), from.max(to));
+                        let (a, b) = (codepoint(self.buffer, a), codepoint(self.buffer, b));
                         let copy_text = self.buffer[a..b].to_string();
                         ClipboardContext::new().and_then(|mut cc| {
                             cc.set_contents(copy_text)
@@ -199,18 +232,20 @@ impl<'a> Widget for Input<'a> {
 
                     Event::Press(Key::X, Modifiers{ ctrl: true, alt: false, shift: false, logo: false }) => {
                         let (from, to) = (from.min(to), from.max(to));
-                        let cut_text = self.buffer[from..to].to_string();
+                        let (a, b) = (codepoint(self.buffer, from), codepoint(self.buffer, to));
+                        let cut_text = self.buffer[a..b].to_string();
                         ClipboardContext::new().and_then(|mut cc| {
                             cc.set_contents(cut_text)
                         }).ok();
 
-                        let tail = self.buffer.split_off(from);
+                        let pt = codepoint(self.buffer, from);
+                        let tail = self.buffer.split_off(pt);
                         if to > from {
-                            self.buffer.push_str(tail.split_at(to-from).1);
+                            self.buffer.push_str(tail.split_at(codepoint(&tail, to-from)).1);
                         } else if tail.len() > 0 {
-                            self.buffer.push_str(tail.split_at(1).1);
+                            self.buffer.push_str(tail.split_at(codepoint(&tail, 1)).1);
                         }
-                        text.text = self.buffer.clone();
+                        text.text = text_display(self.buffer, self.password);
 
                         InputState::Selected(from, from, since)
                     },
@@ -222,14 +257,16 @@ impl<'a> Widget for Input<'a> {
                         }).ok();
 
                         if let Some(paste_text) = paste_text {
-                            let mut tail = self.buffer.split_off(from);
+                            let pt = codepoint(self.buffer, from);
+                            let mut tail = self.buffer.split_off(pt);
                             self.buffer.push_str(&paste_text);
                             if to > from {
-                                self.buffer.push_str(&tail.split_off(to-from));
+                                let pt = codepoint(&tail, to-from);
+                                self.buffer.push_str(&tail.split_off(pt));
                             } else {
                                 self.buffer.push_str(&tail);
                             }
-                            text.text = self.buffer.clone();
+                            text.text = text_display(self.buffer, self.password);
 
                             InputState::Selected(
                                 from+paste_text.len(), 
@@ -256,7 +293,7 @@ impl<'a> Widget for Input<'a> {
 
                     Event::Press(Key::Right, Modifiers{ shift: false, .. }) => {
                         let (from, to) = (from.min(to), from.max(to));
-                        if from != to || to >= self.buffer.len() {
+                        if from != to || to >= self.buffer.chars().count() {
                             InputState::Selected(to, to, Instant::now())
                         } else {
                             InputState::Selected(to+1, to+1, Instant::now())
@@ -264,7 +301,8 @@ impl<'a> Widget for Input<'a> {
                     },
 
                     Event::Press(Key::Right, Modifiers{ shift: true, .. }) => {
-                        InputState::Selected(from, (to+1).min(self.buffer.len()), Instant::now())
+                        let count = self.buffer.chars().count();
+                        InputState::Selected(from, (to+1).min(count), Instant::now())
                     },
 
                     Event::Press(Key::Home, Modifiers{ shift: false, .. }) => {
@@ -276,11 +314,13 @@ impl<'a> Widget for Input<'a> {
                     },
 
                     Event::Press(Key::End, Modifiers{ shift: false, .. }) => {
-                        InputState::Selected(self.buffer.len(), self.buffer.len(), Instant::now())
+                        let count = self.buffer.chars().count();
+                        InputState::Selected(count, count, Instant::now())
                     },
 
                     Event::Press(Key::End, Modifiers{ shift: true, .. }) => {
-                        InputState::Selected(from, self.buffer.len(), Instant::now())
+                        let count = self.buffer.chars().count();
+                        InputState::Selected(from, count, Instant::now())
                     },
 
                     _ => {
@@ -368,5 +408,4 @@ impl<'a> Widget for Input<'a> {
     fn result(self, _state: &Self::State) -> Self::Result {
         self.buffer.as_str()
     }
-
 }
