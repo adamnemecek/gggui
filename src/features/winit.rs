@@ -5,6 +5,7 @@ use winit::DeviceEvent;
 use winit::KeyboardInput;
 use winit::MouseButton;
 use winit::ElementState;
+use winit::MouseScrollDelta;
 
 pub fn convert_event(ev: winit::Event) -> Option<Event> {
     match ev {
@@ -46,6 +47,15 @@ pub fn convert_event(ev: winit::Event) -> Option<Event> {
             },
             WindowEvent::CursorMoved{ position: (x, y), .. } => {
                 Some(Event::Cursor(x as f32, y as f32))
+            },
+            WindowEvent::MouseWheel{ delta, .. } => {
+                match delta {
+                    MouseScrollDelta::LineDelta(dx, dy) => 
+                        Some(Event::Scroll(dx * 20.0, dy * 20.0)),
+
+                    MouseScrollDelta::PixelDelta(dx, dy) =>
+                        Some(Event::Scroll(dx, dy)),
+                }
             },
             _ => None,
         },

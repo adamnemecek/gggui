@@ -53,6 +53,8 @@ pub enum Event {
     Motion(f32, f32),
     /// The mouse cursor was moved to a location.
     Cursor(f32, f32),
+    /// The mouse wheel or touchpad scroll gesture sent us some scroll event.
+    Scroll(f32, f32),
     /// Text input was received, usually via the keyboard.
     Text(char),
     /// The window was focused or lost focus.

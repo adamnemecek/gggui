@@ -3,6 +3,7 @@ use super::*;
 #[derive(Clone,Copy,PartialEq)]
 pub enum ScrollState {
     Idle,
+    HoverContent,
     HoverH(f32),
     HoverV(f32),
     ScrollH(f32),
@@ -154,6 +155,9 @@ impl<'a> Widget for Scroll<'a> {
             ScrollState::Idle => {
                 ScrollState::Idle
             },
+            ScrollState::HoverContent => {
+                ScrollState::HoverContent
+            },
             ScrollState::HoverH(x) => {
                 if let Event::Press(Key::LeftMouseButton, _) = event {
                     capture = Capture::CaptureFocus(MouseStyle::Arrow);
@@ -214,6 +218,13 @@ impl<'a> Widget for Scroll<'a> {
             },
         };
 
+        if *state != ScrollState::Idle {
+            if let Event::Scroll(dx, dy) = event {
+                self.scroll.0 = (self.scroll.0 - dx).max(0.0).min(self.content.0);
+                self.scroll.1 = (self.scroll.1 - dy).max(0.0).min(self.content.1);
+            }
+        }
+
         capture
     }
 
@@ -273,7 +284,13 @@ impl<'a> Widget for Scroll<'a> {
                     }
                 }
 
-                Hover::NoHover
+                if cursor.inside(&layout) {
+                    *state = ScrollState::HoverContent;
+                    Hover::HoverIdle
+                } else {
+                    *state = ScrollState::Idle;
+                    Hover::NoHover
+                }
             },
         }
     }
