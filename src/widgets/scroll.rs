@@ -57,6 +57,7 @@ impl<'a> Scroll<'a> {
         &self, 
         mut scroll: (f32, f32), 
         mut layout: Rect,
+        estimate: bool,
         child: WidgetMeasure
     ) -> (Rect, (f32,f32), (f32,f32)) {
         if self.scrollable_h {
@@ -82,8 +83,10 @@ impl<'a> Scroll<'a> {
                 content.1 = measured.height() - (layout.height()-v_bar_size);
             }
 
-            scroll.0 = scroll.0.min(content.0);
-            scroll.1 = scroll.1.min(content.1);
+            if !estimate {
+                scroll.0 = scroll.0.min(content.0);
+                scroll.1 = scroll.1.min(content.1);
+            }
 
             (
                 measured.size().translate(layout.left - scroll.0, layout.top - scroll.1), 
@@ -120,7 +123,7 @@ impl<'a> Widget for Scroll<'a> {
         layout: Rect, 
         child: WidgetMeasure
     ) -> Rect {
-        self.scroll_layout(*self.scroll, layout, child).0
+        self.scroll_layout(*self.scroll, layout, true, child).0
     }
 
     fn layout(
@@ -130,7 +133,7 @@ impl<'a> Widget for Scroll<'a> {
         child: WidgetMeasure
     ) -> Rect {
         let (layout, scroll, content) =
-            self.scroll_layout(*self.scroll, layout, child);
+            self.scroll_layout(*self.scroll, layout, false, child);
 
         *self.scroll = scroll;
         self.content = content;
