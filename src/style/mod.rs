@@ -8,6 +8,8 @@ pub trait Style {
     fn new(ui: &mut Ui) -> Self;
     fn lable(&self, txt: &str) -> Lable;
     fn title(&self, txt: &str) -> Lable;
+    fn checkbox<'a>(&self, val: &'a mut bool) -> Toggle<'a, bool>;
+    fn radio<'a, T: Clone+PartialEq+'a>(&self, val: &'a mut T, target: T) -> Toggle<'a, T>;
     fn button(&self) -> Button;
     fn flow(&self) -> Flow;
     fn scroll<'a>(&self, scroll: &'a mut (f32, f32)) -> Scroll<'a>;
