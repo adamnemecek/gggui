@@ -227,13 +227,13 @@ impl<'a> Widget for WindowController<'a> {
         }
     }
 
-    fn childs(&self, _: &Self::State, layout: Rect) -> ChildType {
+    fn child_area(&self, _: &Self::State, layout: Rect) -> ChildArea {
         match &self.properties.background {
             &Background::Patch(ref patch) => {
-                ChildType::Intersect(patch.content_rect(layout))
+                ChildArea::ConfineContentAndInput(patch.content_rect(layout))
             },
             &_ => {
-                ChildType::Intersect(layout)
+                ChildArea::ConfineContentAndInput(layout)
             },
         }
     }

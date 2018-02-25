@@ -337,14 +337,14 @@ impl<'a> Widget for Scroll<'a> {
         submit(Primitive::PopClip);
     }
 
-    fn childs(&self, _: &Self::State, mut layout: Rect) -> ChildType {
+    fn child_area(&self, _: &Self::State, mut layout: Rect) -> ChildArea {
         if self.scrollable_h {
             layout.bottom = layout.bottom - self.bar_h.image.size.height();
         }
         if self.scrollable_v {
             layout.right = layout.right - self.bar_v.image.size.width();
         }
-        ChildType::IntersectInputOnly(layout)
+        ChildArea::OverflowContentConfineInput(layout)
     }
 
     fn result(self, _: &Self::State) -> Self::Result {

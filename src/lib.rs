@@ -411,20 +411,20 @@ impl<'a> UiContext<'a> {
 
         //--------------------------------------------------------------------------------------//
         // handle children
-        let (child_capture, child_mouse_style) = match widget.childs(&state, layout) {
-            ChildType::None => (Capture::None, None),
+        let (child_capture, child_mouse_style) = match widget.child_area(&state, layout) {
+            ChildArea::None => (Capture::None, None),
             child_type => {
                 let layouter = LayoutCell::new(&mut widget, &mut state, layout);
                 let events = self.events.clone();
                 let (cursor, drawlist_sub, clip_vis) = match child_type {
-                    ChildType::Intersect(ref clip) => 
+                    ChildArea::ConfineContentAndInput(ref clip) => 
                         (self.cursor.sub(clip), false, true),
-                    ChildType::IntersectInputOnly(ref clip) => 
+                    ChildArea::OverflowContentConfineInput(ref clip) => 
                         (self.cursor.sub(clip), false, false),
-                    ChildType::Expand(ref clip) => 
-                        (self.cursor.expand(clip), true, true),
-                    ChildType::Overflow =>
+                    ChildArea::OverflowContentAndInput =>
                         (self.cursor, false, false),
+                    ChildArea::Popup(ref clip) => 
+                        (self.cursor.expand(clip), true, true),
                     _ => unreachable!(),
                 };
 

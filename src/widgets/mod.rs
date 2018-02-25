@@ -8,6 +8,7 @@ mod button;
 mod toggle;
 mod input;
 mod lable;
+mod menu;
 mod window;
 
 pub use self::flow::*;
@@ -16,6 +17,7 @@ pub use self::button::*;
 pub use self::toggle::*;
 pub use self::input::*;
 pub use self::lable::*;
+pub use self::menu::*;
 pub use self::window::*;
 
 pub enum StateType {
@@ -41,11 +43,12 @@ pub struct MousePosition {
     pub visibility: Option<Rect>
 }
 
-pub enum ChildType {
-    Intersect(Rect),
-    IntersectInputOnly(Rect),
-    Expand(Rect),
-    Overflow,
+pub enum ChildArea {
+    ConfineContentAndInput(Rect),
+    OverflowContentConfineInput(Rect),
+    OverflowContentAndInput,
+    Popup(Rect),
+    
     None,
 }
 
@@ -161,12 +164,12 @@ pub trait Widget {
         submit: F) { 
     }
 
-    fn childs(
+    fn child_area(
         &self, 
         state: &Self::State,
         layout: Rect,
-    ) -> ChildType {
-        ChildType::None
+    ) -> ChildArea {
+        ChildArea::None
     }
 
     fn autofocus(&self) -> bool {

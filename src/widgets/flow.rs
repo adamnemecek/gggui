@@ -358,16 +358,16 @@ impl Widget for Flow {
         }
     }
 
-    fn childs(&self, _: &Self::State, layout: Rect) -> ChildType {
+    fn child_area(&self, _: &Self::State, layout: Rect) -> ChildArea {
         match &self.background {
             &Background::Patch(ref patch) => {
-                ChildType::Intersect(patch.content_rect(layout))
+                ChildArea::ConfineContentAndInput(patch.content_rect(layout))
             },
             &Background::None => {
-                ChildType::Overflow
+                ChildArea::OverflowContentAndInput
             },
             &_ => {
-                ChildType::Intersect(layout)
+                ChildArea::ConfineContentAndInput(layout)
             },
         }
     }
