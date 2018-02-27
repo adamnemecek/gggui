@@ -37,9 +37,11 @@ impl<'a, T> Menu<'a, T> {
     }
 }
 
-fn for_each_item<'a, F, T>(slice: &'a[MenuItem<'a, T>], state: &MenuState, mut f: F) where 
-    F: FnMut(Rect, &T, bool)
+fn for_each_item<'a, F, T>(slice: &'a[MenuItem<'a, T>], state: &MenuState, mut f: F) -> MenuState 
+where 
+    F: FnMut(Rect, &T, bool, bool) -> bool
 {
+    let mut result = state.clone();
     match &state.state {
         &MenuStateInner::Idle => (),
         &MenuStateInner::Open | 
@@ -73,38 +75,52 @@ fn for_each_item<'a, F, T>(slice: &'a[MenuItem<'a, T>], state: &MenuState, mut f
                     bottom: y + height
                 };
 
-                f(layout, item, recursive);
-
-                if let MenuStateInner::Hover(index, _) = state.state {
+                let activated = if let MenuStateInner::Hover(index, _) = state.state {
                     if index == i {
                         selected_y = y;
+                        f(layout, item, true, recursive)
+                    } else {
+                        f(layout, item, false, recursive)
                     }
+                } else {
+                    f(layout, item, false, recursive)
+                };
+
+                if activated {
+                    result.state = MenuStateInner::Hover(i, Box::new(MenuStateInner::Open));
                 }
 
                 i += 1;
                 y += height;
             }
 
-            match &state.state {
-                &MenuStateInner::Hover(index, ref state) => {
+            result.state = match result.state {
+                MenuStateInner::Hover(index, inner_state) => {
                     match &slice[index] {
                         &MenuItem::StringItem(_, _, sub) |
                         &MenuItem::IconItem(_, _, _, sub) => {
-                            let inner: &MenuStateInner = &*state;
                             let sub_state = MenuState {
                                 x: x + width - 2.0,
                                 y: selected_y,
-                                state: inner.clone(),
+                                state: *inner_state,
                             };
-                            for_each_item(sub, &sub_state, f);
+
+                            if sub.len() > 0 {
+                                let inner = Box::new(for_each_item(sub, &sub_state, f).state);
+                                MenuStateInner::Hover(index, inner)
+                            } else {
+                                let inner = Box::new(MenuStateInner::Idle);
+                                MenuStateInner::Hover(index, inner)
+                            }
                         },
-                        &_ => (),
+                        &_ => MenuStateInner::Idle,
                     }
                 },
-                _ => (),
+                state => state,
             }
         }
     }
+    result
 }
 
 impl<'a, T: 'a> Widget for Menu<'a, T> {
@@ -129,8 +145,8 @@ impl<'a, T: 'a> Widget for Menu<'a, T> {
 
     fn measure(
         &self, 
-        state: &Self::State,
-        layout: Option<Rect>
+        _: &Self::State,
+        _: Option<Rect>
     ) -> Option<Rect> {
         Some(Rect::from_wh(0.0, 0.0))
     }
@@ -138,10 +154,10 @@ impl<'a, T: 'a> Widget for Menu<'a, T> {
     fn event(
         &mut self, 
         state: &mut Self::State, 
-        layout: Rect, 
-        cursor: MousePosition, 
+        _: Rect, 
+        _: MousePosition, 
         event: Event,
-        is_focused: bool
+        _: bool
     ) -> Capture {
         let mut capture = Capture::None;
 
@@ -155,8 +171,17 @@ impl<'a, T: 'a> Widget for Menu<'a, T> {
                 }
             },
             MenuStateInner::Open => {
-                capture = Capture::CaptureFocus(MouseStyle::Arrow);
-                MenuStateInner::Open
+                match event {
+                    Event::Press(Key::LeftMouseButton, _) |
+                    Event::Press(Key::RightMouseButton, _) => {
+                        capture = Capture::None;
+                        MenuStateInner::Idle
+                    },
+                    _ => {
+                        capture = Capture::CaptureFocus(MouseStyle::Arrow);
+                        MenuStateInner::Open
+                    }
+                }
             },
             MenuStateInner::Hover(item, sub) => {
                 capture = Capture::CaptureFocus(MouseStyle::Arrow);
@@ -178,7 +203,12 @@ impl<'a, T: 'a> Widget for Menu<'a, T> {
                 state.x = cursor.x;
                 state.y = cursor.y;
             },
-            &_ => (), 
+            &MenuStateInner::Open |
+            &MenuStateInner::Hover(_, _) => {
+                *state = for_each_item(self.menu, state, |rect, item, hovered, recursive| {
+                    cursor.inside(&rect)
+                });
+            },
         };
         Hover::HoverIdle
     }
@@ -186,10 +216,26 @@ impl<'a, T: 'a> Widget for Menu<'a, T> {
     fn predraw<F: FnMut(Primitive)>(
         &self, 
         state: &Self::State,
-        layout: Rect, 
-        submit: F
+        _: Rect, 
+        mut submit: F
     ) { 
-        // todo
+        for_each_item(self.menu, state, |rect, item, hovered, recursive| {
+            if hovered {
+                submit(Primitive::DrawRect(rect, Color{ r: 0.0, g: 0.0, b: 1.0, a: 1.0 }));
+            } else {
+                submit(Primitive::DrawRect(rect, Color::black()));
+            }
+
+            false
+        });
+    }
+
+    fn child_area(
+        &self, 
+        _: &Self::State,
+        _: Rect,
+    ) -> ChildArea {
+        ChildArea::Popup(Rect::from_wh(0.0, 0.0))
     }
 
     fn result(self, _: &Self::State) -> Option<&'a T> {

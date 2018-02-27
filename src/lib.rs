@@ -361,15 +361,11 @@ impl<'a> UiContext<'a> {
         self.nested("", widget, |_ui|{ })
     }
 
-    pub fn nested<
+    pub fn nested<W, F>(&mut self, id: &str, mut widget: W, children: F) -> W::Result 
+    where
         W: Widget, 
-        F: FnOnce(&mut UiContext)
-    > (
-        &mut self, 
-        id: &str, 
-        mut widget: W, 
-        children: F
-    ) -> W::Result {
+        F: FnOnce(&mut UiContext),
+    {
         let mut state = self.ui.get_state::<W>(id);
         let mut is_focused = self.ui.focus.as_ref().map_or(false, |f| f.0 == id);
 
@@ -407,7 +403,11 @@ impl<'a> UiContext<'a> {
         if enabled && (is_focused || self.ui.previous_capture == Capture::None) {
             widget.hover(&mut state, layout, self.cursor);
         }
-        widget.predraw(&state, layout, |p| self.drawlist.push(p));
+        if let ChildArea::Popup(_) = widget.child_area(&state, layout) {
+            widget.predraw(&state, layout, |p| self.drawlist_sub.push(p));
+        } else {
+            widget.predraw(&state, layout, |p| self.drawlist.push(p));
+        }
 
         //--------------------------------------------------------------------------------------//
         // handle children
@@ -521,7 +521,11 @@ impl<'a> UiContext<'a> {
             self.mouse_style = child_mouse_style;
         }
 
-        widget.postdraw(&state, layout, |p| self.drawlist.push(p));
+        if let ChildArea::Popup(_) = widget.child_area(&state, layout) {
+            widget.postdraw(&state, layout, |p| self.drawlist_sub.push(p));
+        } else {
+            widget.postdraw(&state, layout, |p| self.drawlist.push(p));
+        }
         if W::tabstop() && is_focused && enabled {
             self.drawlist.push(Primitive::DrawRect(layout, Color::white().with_alpha(0.16)));
         }
