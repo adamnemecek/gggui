@@ -220,18 +220,18 @@ impl<'a> Widget for WindowController<'a> {
             &Background::Color(ref color) => {
                 submit(Primitive::DrawRect(layout, *color));
             },
-            &Background::Image(ref image) => {
-                submit(Primitive::DrawImage(image.clone(), layout, Color::white()));
+            &Background::Image(ref image, a) => {
+                submit(Primitive::DrawImage(image.clone(), layout, Color::white().with_alpha(a)));
             },
-            &Background::Patch(ref patch) => {
-                submit(Primitive::Draw9(patch.clone(), layout, Color::white()));
+            &Background::Patch(ref patch, a) => {
+                submit(Primitive::Draw9(patch.clone(), layout, Color::white().with_alpha(a)));
             },
         }
     }
 
     fn child_area(&self, _: &Self::State, layout: Rect) -> ChildArea {
         match &self.properties.background {
-            &Background::Patch(ref patch) => {
+            &Background::Patch(ref patch, _) => {
                 ChildArea::ConfineContentAndInput(patch.content_rect(layout))
             },
             &_ => {

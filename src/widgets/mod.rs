@@ -49,7 +49,6 @@ pub enum ChildArea {
     OverflowContentConfineInput(Rect),
     OverflowContentAndInput,
     Popup(Rect),
-    
     None,
 }
 

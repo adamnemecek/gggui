@@ -153,7 +153,7 @@ impl Text {
                     },
                 }
 
-                Rect::from_wh(w.ceil(), (h - line.descent).ceil())
+                Rect::from_xywh(r.left, r.top, w.ceil(), (h - line.descent).ceil())
             })
     }
 

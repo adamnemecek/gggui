@@ -12,13 +12,13 @@ pub struct Button {
     pub normal: Patch,
     pub hover: Patch,
     pub pressed: Patch,
-    pub size: Option<(f32,f32)>,
+    pub size: Option<Rect>,
     pub text: Option<Text>,
     pub text_color: Color,
 }
 
 impl Button {
-    pub fn size(mut self, size: (f32, f32)) -> Self {
+    pub fn size(mut self, size: Rect) -> Self {
         self.size = Some(size);
         self
     }
@@ -51,7 +51,7 @@ impl Widget for Button {
     }
 
     fn measure(&self, _state: &Self::State, _layout: Option<Rect>) -> Option<Rect> {
-        let measured = self.size.map_or_else(
+        let measured = self.size.unwrap_or_else(
             || self.normal.measure_with_content(
                 self.text.as_ref().map_or(
                     Rect{ left: 0.0, top: 0.0, right: 0.0, bottom: 0.0},
@@ -59,8 +59,7 @@ impl Widget for Button {
                         text.measure(None)
                     }
                 )
-            ),
-            |size| Rect{ left: 0.0, top: 0.0, right: size.0, bottom: size.1 }
+            )
         );
         Some(measured)
     }

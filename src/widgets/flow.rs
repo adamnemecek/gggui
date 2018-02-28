@@ -60,13 +60,13 @@ impl Flow {
         self
     }
 
-    pub fn background_image(mut self, background: Image) -> Self {
-        self.background = Background::Image(background);
+    pub fn background_image(mut self, background: Image, alpha: f32) -> Self {
+        self.background = Background::Image(background, alpha);
         self
     }
 
-    pub fn background_patch(mut self, background: Patch) -> Self {
-        self.background = Background::Patch(background);
+    pub fn background_patch(mut self, background: Patch, alpha: f32) -> Self {
+        self.background = Background::Patch(background, alpha);
         self
     }
 
@@ -141,7 +141,7 @@ impl Widget for Flow {
         child: WidgetMeasure
     ) -> Rect {
         let layout = match &self.background {
-            &Background::Patch(ref patch) => patch.content_rect(layout),
+            &Background::Patch(ref patch, _) => patch.content_rect(layout),
             _ => layout
         };
 
@@ -314,49 +314,37 @@ impl Widget for Flow {
             },
 
             FlowStyle::Absolute => {
-                if self.counter == 0 {
-                    let r = child(None).map_or(layout, |child| {
-                        Rect {
-                            left: layout.left + child.left,
-                            right: layout.left + child.right,
-                            top: layout.top + child.top,
-                            bottom: layout.bottom + child.bottom,
-                        }
-                    });
-
-                    self.counter += 1;
-                    r.round()
-                } else {
-                    Rect::from_wh(0.0, 0.0)
-                }
+                let r = child(Some(layout)).map_or(layout, |child| {
+                    Rect {
+                        left: layout.left + child.left,
+                        right: layout.left + child.right,
+                        top: layout.top + child.top,
+                        bottom: layout.top + child.bottom,
+                    }
+                });
+                r.round()
             }
         }
     }
 
     fn predraw<F: FnMut(Primitive)>(&self, _state: &Self::State, layout: Rect, mut submit: F) { 
-        let color = if self.enabled {
-            Color::white()
-        } else {
-            Color{ r: 0.8, g: 0.8, b: 0.8, a: 1.0 }
-        };
-
         match &self.background {
             &Background::None => (),
             &Background::Color(ref color) => {
                 submit(Primitive::DrawRect(layout, *color));
             },
-            &Background::Image(ref image) => {
-                submit(Primitive::DrawImage(image.clone(), layout, color));
+            &Background::Image(ref image, a) => {
+                submit(Primitive::DrawImage(image.clone(), layout, Color::white().with_alpha(a)));
             },
-            &Background::Patch(ref patch) => {
-                submit(Primitive::Draw9(patch.clone(), layout, color));
+            &Background::Patch(ref patch, a) => {
+                submit(Primitive::Draw9(patch.clone(), layout, Color::white().with_alpha(a)));
             },
         }
     }
 
     fn child_area(&self, _: &Self::State, layout: Rect) -> ChildArea {
         match &self.background {
-            &Background::Patch(ref patch) => {
+            &Background::Patch(ref patch, _) => {
                 ChildArea::ConfineContentAndInput(patch.content_rect(layout))
             },
             &Background::None => {

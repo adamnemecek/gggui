@@ -234,7 +234,7 @@ impl<'a> UiContext<'a> {
     }
 
     pub fn window<
-        F: FnOnce(&mut UiContext)
+        F: FnOnce(&mut UiContext, Rect)
     > (
         &mut self,
         id: &str,
@@ -354,17 +354,17 @@ impl<'a> UiContext<'a> {
     }
 
     pub fn simple<W: Widget>(&mut self, id: &str, widget: W) -> W::Result {
-        self.nested(id, widget, |_ui|{ })
+        self.nested(id, widget, |_ui,_area|{ })
     }
 
     pub fn stateless<W: Widget>(&mut self, widget: W) -> W::Result {
-        self.nested("", widget, |_ui|{ })
+        self.nested("", widget, |_ui,_area|{ })
     }
 
     pub fn nested<W, F>(&mut self, id: &str, mut widget: W, children: F) -> W::Result 
     where
         W: Widget, 
-        F: FnOnce(&mut UiContext),
+        F: FnOnce(&mut UiContext, Rect),
     {
         let mut state = self.ui.get_state::<W>(id);
         let mut is_focused = self.ui.focus.as_ref().map_or(false, |f| f.0 == id);
@@ -411,19 +411,20 @@ impl<'a> UiContext<'a> {
 
         //--------------------------------------------------------------------------------------//
         // handle children
-        let (child_capture, child_mouse_style) = match widget.child_area(&state, layout) {
-            ChildArea::None => (Capture::None, None),
+        let child_area = widget.child_area(&state, layout);
+        let (child_capture, child_mouse_style) = match &child_area {
+            &ChildArea::None => (Capture::None, None),
             child_type => {
                 let layouter = LayoutCell::new(&mut widget, &mut state, layout);
                 let events = self.events.clone();
                 let (cursor, drawlist_sub, clip_vis) = match child_type {
-                    ChildArea::ConfineContentAndInput(ref clip) => 
+                    &ChildArea::ConfineContentAndInput(ref clip) => 
                         (self.cursor.sub(clip), false, true),
-                    ChildArea::OverflowContentConfineInput(ref clip) => 
+                    &ChildArea::OverflowContentConfineInput(ref clip) => 
                         (self.cursor.sub(clip), false, false),
-                    ChildArea::OverflowContentAndInput =>
+                    &ChildArea::OverflowContentAndInput =>
                         (self.cursor, false, false),
-                    ChildArea::Popup(ref clip) => 
+                    &ChildArea::Popup(ref clip) => 
                         (self.cursor.expand(clip), true, true),
                     _ => unreachable!(),
                 };
@@ -440,11 +441,11 @@ impl<'a> UiContext<'a> {
                         
                         if clip_vis {    
                             sub.drawlist.push(Primitive::PushClip(vis));
-                            children(&mut sub);
+                            children(&mut sub, vis);
                             sub.drawlist.append(&mut sub.drawlist_sub);
                             sub.drawlist.push(Primitive::PopClip);
                         } else {
-                            children(&mut sub);
+                            children(&mut sub, vis);
                             sub.drawlist.append(&mut sub.drawlist_sub);
                         }
 

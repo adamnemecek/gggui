@@ -88,7 +88,9 @@ impl Style for Default {
                 size: 16.0,
                 wrap: TextWrap::WordWrap,
             },
-            text_color: Color{ r : 0.0, g: 0.0, b: 0.0, a: 1.0 }
+            text_color: Color{ r : 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            border_color: None,
+            size: None,
         }
     }
 
@@ -100,7 +102,9 @@ impl Style for Default {
                 size: 28.0,
                 wrap: TextWrap::NoWrap,
             },
-            text_color: Color{ r : 0.0, g: 0.0, b: 0.0, a: 1.0 }
+            text_color: Color{ r : 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            border_color: None,
+            size: None,
         }
     }
 
@@ -186,7 +190,7 @@ impl Style for Default {
             draggable: true,
             centered: true,
             modal: false,
-            background: Background::Patch(self.window.clone()),
+            background: Background::Patch(self.window.clone(), 1.0),
         }
     }
 
@@ -198,7 +202,7 @@ impl Style for Default {
             draggable: true,
             centered: true,
             modal: true,
-            background: Background::Patch(self.window.clone()),
+            background: Background::Patch(self.window.clone(), 1.0),
         }
     }
 }

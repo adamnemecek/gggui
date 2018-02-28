@@ -29,14 +29,14 @@ pub enum Primitive {
 pub enum Background {
     None,
     Color(Color),
-    Image(Image),
-    Patch(Patch),
+    Image(Image, f32),
+    Patch(Patch, f32),
 }
 
 impl Background {
     pub fn content_rect(&self, span: Rect) -> Rect {
         match self {
-            &Background::Patch(ref patch) => patch.content_rect(span),
+            &Background::Patch(ref patch, _) => patch.content_rect(span),
             &_ => span,
         }
     }

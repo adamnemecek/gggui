@@ -27,6 +27,15 @@ impl Rect {
         }
     }
 
+    pub fn from_xywh(x: f32, y: f32, w: f32, h: f32) -> Rect {
+        Rect {
+            left: x,
+            right: x+w,
+            top: y,
+            bottom: y+h
+        }
+    }
+
     pub fn intersect(&self, other: &Rect) -> Option<Rect> {
         let result = Rect {
             left: self.left.max(other.left),

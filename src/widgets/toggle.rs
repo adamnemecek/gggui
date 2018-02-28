@@ -15,7 +15,7 @@ pub struct Toggle<'a, T: Clone+PartialEq+'a> {
     pub normal_checked: Image,
     pub hover_checked: Image,
     pub pressed_checked: Image,
-    pub size: Option<(f32,f32)>,
+    pub size: Option<Rect>,
     pub text: Option<Text>,
     pub text_color: Color,
 
@@ -53,7 +53,7 @@ impl<'a, T: Clone+PartialEq> Toggle<'a, T> {
         }
     }
 
-    pub fn size(mut self, size: (f32, f32)) -> Self {
+    pub fn size(mut self, size: Rect) -> Self {
         self.size = Some(size);
         self
     }
@@ -86,7 +86,7 @@ impl<'a, T: Clone+PartialEq> Widget for Toggle<'a, T> {
     }
 
     fn measure(&self, _state: &Self::State, _layout: Option<Rect>) -> Option<Rect> {
-        let measured = self.size.map_or_else(
+        let measured = self.size.unwrap_or_else(
             || self.text.as_ref().map_or(
                 Rect{ left: 0.0, top: 0.0, right: 0.0, bottom: 0.0},
                 |text| {
@@ -96,8 +96,7 @@ impl<'a, T: Clone+PartialEq> Widget for Toggle<'a, T> {
                         text_size.height().max(self.normal.size.height())
                     )
                 }
-            ),
-            |size| Rect{ left: 0.0, top: 0.0, right: size.0, bottom: size.1 }
+            )
         );
         Some(measured)
     }
