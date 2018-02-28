@@ -1,6 +1,7 @@
 use super::*;
 use super::events::*;
 use downcast::Any;
+use std::default::Default;
 
 mod flow;
 mod scroll;
@@ -83,18 +84,22 @@ impl WidgetState for GenericWidgetState {  }
 
 impl WidgetState for () { }
 
+impl Default for GenericWidgetState {
+    fn default() -> Self {
+        GenericWidgetState::Idle
+    }
+}
+
 pub type WidgetMeasure<'a> = Box<Fn(Option<Rect>)->Option<Rect>+'a>;
 
 #[allow(unused_variables)]
 pub trait Widget {
     type Result;
-    type State: WidgetState + Clone;
+    type State: WidgetState + Clone + Default;
 
     fn state_type() -> StateType { 
         StateType::Focus 
     }
-
-    fn default() -> Self::State;
 
     fn tabstop() -> bool { 
         false 

@@ -16,8 +16,6 @@ impl Widget for Lable {
     type Result = ();
     type State = ();
 
-    fn default() -> Self::State { () }
-
     fn measure(&self, _state: &Self::State, layout: Option<Rect>) -> Option<Rect> {
         Some(self.text.measure(layout))
     }

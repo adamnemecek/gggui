@@ -36,13 +36,15 @@ impl Button {
 
 impl WidgetState for ButtonState { }
 
+impl Default for ButtonState {
+    fn default() -> Self {
+        ButtonState::Unpressed
+    }
+}
+
 impl Widget for Button {
     type Result = bool;
     type State = ButtonState;
-
-    fn default() -> Self::State {
-        ButtonState::Unpressed
-    }
 
     fn tabstop() -> bool {
         true

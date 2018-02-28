@@ -71,14 +71,16 @@ impl<'a, T: Clone+PartialEq> Toggle<'a, T> {
 
 impl WidgetState for ToggleState { }
 
+impl Default for ToggleState {
+    fn default() -> Self {
+        ToggleState::Idle
+    }
+}
+
 impl<'a, T: Clone+PartialEq> Widget for Toggle<'a, T> {
     type Result = bool;
     type State = ToggleState;
-
-    fn default() -> ToggleState {
-        ToggleState::Idle
-    }
-
+    
     fn tabstop() -> bool {
         true
     }

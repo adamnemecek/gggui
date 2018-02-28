@@ -1,5 +1,7 @@
 use super::*;
 use std::mem::replace;
+use std::default::Default;
+use std::time::Instant;
 
 pub enum MenuItem<'a, T: 'a> {
     Separator,
@@ -12,21 +14,21 @@ pub struct Menu<'a, T: 'a> {
     result: Option<&'a T>,
 }
 
-#[derive(Clone)]
-pub struct MenuState {
-    x: f32,
-    y: f32,
-    state: MenuStateInner,
-}
+pub type MenuPath = SmallVec<[i8; 8]>;
 
-#[derive(Clone)]
-enum MenuStateInner {
+#[derive(Clone,PartialEq)]
+pub enum MenuState {
     Idle,
-    Open,
-    Hover(usize, Box<MenuStateInner>),
+    Hover(f32, f32, MenuPath, Instant),
 }
 
 impl WidgetState for MenuState { }
+
+impl Default for MenuState {
+    fn default() -> Self {
+        MenuState::Idle
+    }
+}
 
 impl<'a, T> Menu<'a, T> {
     pub fn new(menu: &'a[MenuItem<'a, T>]) -> Self {
@@ -37,103 +39,125 @@ impl<'a, T> Menu<'a, T> {
     }
 }
 
-fn for_each_item<'a, F, T>(slice: &'a[MenuItem<'a, T>], state: &MenuState, mut f: F) -> MenuState 
-where 
-    F: FnMut(Rect, &T, bool, bool) -> bool
-{
-    let mut result = state.clone();
-    match &state.state {
-        &MenuStateInner::Idle => (),
-        &MenuStateInner::Open | 
-        &MenuStateInner::Hover(_,_) => {
-            // find widest item
-            let width = slice.iter().fold(0.0, |_acc, _item| 32.0);
+trait MenuPathWrapper {
+    fn truncate(&mut self, length: usize);
+    fn push(&mut self, item: i8);
+    fn at(&self, index: usize) -> Option<i8>;
+}
 
-            // layout items
-            let x = state.x;
-            let mut y = state.y;
-            let mut selected_y = 0.0;
-            let mut i = 0;
-            for item in slice {
-                let (item, height, recursive) = match item {
-                    &MenuItem::Separator => {
-                        y += 8.0;
-                        continue;
-                    },
-                    &MenuItem::StringItem(ref item, _, sub) => { 
-                        (item, 24.0, sub.len() > 0)
-                    },
-                    &MenuItem::IconItem(ref item, ref icon, _, sub) => {
-                        (item, icon.size.height().max(24.0), sub.len() > 0)
-                    },
-                };
+struct BorrowMenuPath<'a> { 
+    x: &'a MenuPath
+}
 
-                let layout = Rect { 
-                    left: x, 
-                    top: y, 
-                    right: x + width, 
-                    bottom: y + height
-                };
+impl<'a> MenuPathWrapper for BorrowMenuPath<'a> {
+    fn truncate(&mut self, _: usize) { }
+    fn push(&mut self, _: i8) { }
+    fn at(&self, index: usize) -> Option<i8> { self.x.iter().nth(index).map(|r| *r) }
+}
 
-                let activated = if let MenuStateInner::Hover(index, _) = state.state {
-                    if index == i {
-                        selected_y = y;
-                        f(layout, item, true, recursive)
-                    } else {
-                        f(layout, item, false, recursive)
-                    }
-                } else {
-                    f(layout, item, false, recursive)
-                };
+struct BorrowMutMenuPath<'a> { 
+    x: &'a mut MenuPath
+}
 
-                if activated {
-                    result.state = MenuStateInner::Hover(i, Box::new(MenuStateInner::Open));
-                }
+impl<'a> MenuPathWrapper for BorrowMutMenuPath<'a> {
+    fn truncate(&mut self, length: usize) { self.x.truncate(length); }
+    fn push(&mut self, item: i8) { self.x.push(item); }
+    fn at(&self, index: usize) -> Option<i8> { self.x.iter().nth(index).map(|r| *r) }
+}
 
-                i += 1;
-                y += height;
-            }
+fn for_each_item<
+    'a, 
+    F: FnMut(Rect, &'a T, bool, bool) -> bool, 
+    W: MenuPathWrapper,
+    T
+> (
+    slice: &'a[MenuItem<'a, T>], 
+    depth: usize,
+    position: (f32, f32),
+    mut path: W, 
+    mut time: Instant,
+    mut f: F
+) -> Instant {
+    // find widest item
+    let width = slice.iter().fold(0.0, |_acc, _item| 32.0);
 
-            result.state = match result.state {
-                MenuStateInner::Hover(index, inner_state) => {
-                    match &slice[index] {
-                        &MenuItem::StringItem(_, _, sub) |
-                        &MenuItem::IconItem(_, _, _, sub) => {
-                            let sub_state = MenuState {
-                                x: x + width - 2.0,
-                                y: selected_y,
-                                state: *inner_state,
-                            };
+    // layout items
+    let x = position.0;
+    let mut y = position.1;
+    let mut selected_y = None;
+    let mut i = 0;
 
-                            if sub.len() > 0 {
-                                let inner = Box::new(for_each_item(sub, &sub_state, f).state);
-                                MenuStateInner::Hover(index, inner)
-                            } else {
-                                let inner = Box::new(MenuStateInner::Idle);
-                                MenuStateInner::Hover(index, inner)
-                            }
-                        },
-                        &_ => MenuStateInner::Idle,
-                    }
-                },
-                state => state,
-            }
+    for item in slice {
+        let (item, height, recursive) = match item {
+            &MenuItem::Separator => {
+                y += 8.0;
+                continue;
+            },
+            &MenuItem::StringItem(ref item, _, sub) => { 
+                (item, 24.0, sub.len() > 0)
+            },
+            &MenuItem::IconItem(ref item, ref icon, _, sub) => {
+                (item, icon.size.height().max(24.0), sub.len() > 0)
+            },
+        };
+
+        let layout = Rect { 
+            left: x, 
+            top: y, 
+            right: x + width, 
+            bottom: y + height
+        };
+
+        let hovered = path.at(depth).map_or(false, |j| i == j);
+
+        if f(layout, item, hovered, recursive) {
+            selected_y = Some(y);
+            path.truncate(depth);
+            path.push(i);
+            time = Instant::now();
+        } else if hovered && recursive {
+            selected_y = Some(y);
         }
+
+        i += 1;
+        y += height;
     }
-    result
+
+    // forget hover state if we're not nested deeper than the 
+    //  current menu and nothing was hovered
+    path.at(depth).map(|i| {
+        if (path.at(depth+1).is_none() &&
+            time.elapsed().subsec_nanos() > 200_000_000 && i >= 0) || selected_y.is_none() {
+            path.truncate(depth);
+            path.push(-1);
+        }
+    });    
+
+    if selected_y.is_some() {
+        // recurse into nested menu
+        path.at(depth).map(|index| {
+            if index >= 0 {
+                match &slice[index as usize] {
+                    &MenuItem::StringItem(_, _, sub) |
+                    &MenuItem::IconItem(_, _, _, sub) => {
+                        if sub.len() > 0 {
+                            time = for_each_item(
+                                sub, depth+1, (x+width, selected_y.unwrap()), path, time, f
+                            );
+                        }
+                    },
+                    &_ => (),
+                }
+            }
+        });
+    }
+
+    time
 }
 
 impl<'a, T: 'a> Widget for Menu<'a, T> {
     type Result = Option<&'a T>;
     type State = MenuState;
-
-    fn default() -> MenuState {
-        MenuState {
-            x: 0.0,
-            y: 0.0,
-            state: MenuStateInner::Idle,
-        }
-    }
 
     fn tabstop() -> bool { 
         false 
@@ -155,37 +179,61 @@ impl<'a, T: 'a> Widget for Menu<'a, T> {
         &mut self, 
         state: &mut Self::State, 
         _: Rect, 
-        _: MousePosition, 
+        cursor: MousePosition, 
         event: Event,
         _: bool
     ) -> Capture {
         let mut capture = Capture::None;
 
-        state.state = match replace(&mut state.state, MenuStateInner::Idle) {
-            MenuStateInner::Idle => {
+        *state = match replace(state, MenuState::default()) {
+            MenuState::Idle => {
                 if let Event::Press(Key::RightMouseButton, _) = event {
                     capture = Capture::CaptureFocus(MouseStyle::ArrowClicking);
-                    MenuStateInner::Open
+                    MenuState::Hover(cursor.x, cursor.y, MenuPath::new(), Instant::now())
                 } else {
-                    MenuStateInner::Idle
+                    MenuState::Idle
                 }
             },
-            MenuStateInner::Open => {
-                match event {
-                    Event::Press(Key::LeftMouseButton, _) |
-                    Event::Press(Key::RightMouseButton, _) => {
-                        capture = Capture::None;
-                        MenuStateInner::Idle
-                    },
-                    _ => {
-                        capture = Capture::CaptureFocus(MouseStyle::Arrow);
-                        MenuStateInner::Open
-                    }
-                }
-            },
-            MenuStateInner::Hover(item, sub) => {
+            MenuState::Hover(x, y, path, time)  => {
                 capture = Capture::CaptureFocus(MouseStyle::Arrow);
-                MenuStateInner::Hover(item, sub)
+
+                let mut cursor_outside = true;
+                for_each_item(
+                    self.menu, 
+                    0, (x, y), 
+                    BorrowMenuPath{ x: &path }, 
+                    time,
+                    |rect, item, hovered, _| {
+                        if cursor.inside(&rect) {
+                            cursor_outside = false;
+                            match &event {
+                                &Event::Press(Key::LeftMouseButton, _) => {
+                                    self.result = Some(item);
+                                },
+                                &_ => (),
+                            }
+                        }
+                        hovered
+                    }
+                );
+
+                if self.result.is_some() {
+                    MenuState::Idle
+                } else if cursor_outside {
+                    match event {
+                        Event::Press(Key::LeftMouseButton, _) => {
+                            MenuState::Idle
+                        },
+                        Event::Press(Key::RightMouseButton, _) => {
+                            MenuState::Hover(cursor.x, cursor.y, MenuPath::new(), Instant::now())
+                        },
+                        _ => {
+                            MenuState::Hover(x, y, path, time)
+                        },
+                    }
+                } else {
+                    MenuState::Hover(x, y, path, time)
+                }
             },
         };
 
@@ -198,16 +246,20 @@ impl<'a, T: 'a> Widget for Menu<'a, T> {
         _: Rect, 
         cursor: MousePosition
     ) -> Hover {
-        match &state.state {
-            &MenuStateInner::Idle => {
-                state.x = cursor.x;
-                state.y = cursor.y;
-            },
-            &MenuStateInner::Open |
-            &MenuStateInner::Hover(_, _) => {
-                *state = for_each_item(self.menu, state, |rect, item, hovered, recursive| {
-                    cursor.inside(&rect)
-                });
+        *state = match replace(state, MenuState::default()) {
+            MenuState::Idle => MenuState::Idle,
+
+            MenuState::Hover(x, y, mut path, mut time) => {
+                time = for_each_item(
+                    self.menu, 
+                    0, (x, y), 
+                    BorrowMutMenuPath{ x: &mut path }, 
+                    time,
+                    |rect, _, _, _| {
+                        cursor.inside(&rect)
+                    }
+                );
+                MenuState::Hover(x, y, path, time)
             },
         };
         Hover::HoverIdle
@@ -219,15 +271,25 @@ impl<'a, T: 'a> Widget for Menu<'a, T> {
         _: Rect, 
         mut submit: F
     ) { 
-        for_each_item(self.menu, state, |rect, item, hovered, recursive| {
-            if hovered {
-                submit(Primitive::DrawRect(rect, Color{ r: 0.0, g: 0.0, b: 1.0, a: 1.0 }));
-            } else {
-                submit(Primitive::DrawRect(rect, Color::black()));
+        match state {
+            &MenuState::Idle => (),
+            &MenuState::Hover(x, y, ref path, time) => {
+                for_each_item(
+                    self.menu, 
+                    0, (x, y), 
+                    BorrowMenuPath{ x: &path }, 
+                    time,
+                    |rect, _, hovered, _| {
+                        if hovered {
+                            submit(Primitive::DrawRect(rect, Color{ r: 0.0, g: 0.0, b: 1.0, a: 1.0 }));
+                        } else {
+                            submit(Primitive::DrawRect(rect, Color::black()));
+                        }
+                        hovered
+                    }
+                );
             }
-
-            false
-        });
+        }
     }
 
     fn child_area(

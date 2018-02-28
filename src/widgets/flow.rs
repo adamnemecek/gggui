@@ -94,10 +94,6 @@ impl Widget for Flow {
     type Result = ();
     type State = ();
 
-    fn default() -> Self::State {
-        ()
-    }
-
     fn enabled(&self, _: &Self::State) -> bool {
         self.enabled
     }

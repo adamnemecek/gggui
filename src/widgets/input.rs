@@ -82,13 +82,15 @@ fn codepoint(s: &String, char_index: usize) -> usize {
 
 impl WidgetState for InputState { }
 
+impl Default for InputState {
+    fn default() -> Self {
+        InputState::Idle(0.0, 0.0)
+    }
+}
+
 impl<'a> Widget for Input<'a> {
     type Result = &'a str;
     type State = InputState;
-
-    fn default() -> Self::State {
-        InputState::Idle(0.0, 0.0)
-    }
 
     fn tabstop() -> bool {
         true

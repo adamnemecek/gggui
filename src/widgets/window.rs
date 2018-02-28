@@ -27,6 +27,12 @@ pub enum WindowControllerState {
 
 impl WidgetState for WindowControllerState { }
 
+impl Default for WindowControllerState { 
+    fn default() -> Self {
+        WindowControllerState::Idle
+    }
+}
+
 impl<'a> WindowController<'a> {
     pub fn new(properties: WindowProperties, rect: &'a mut Rect) -> Self { 
         WindowController {
@@ -39,10 +45,6 @@ impl<'a> WindowController<'a> {
 impl<'a> Widget for WindowController<'a> {
     type Result = ();
     type State = WindowControllerState;
-
-    fn default() -> Self::State {
-        WindowControllerState::Idle
-    }
 
     fn measure(&self, _: &Self::State, _: Option<Rect>) -> Option<Rect> {
         Some(self.rect.clone())

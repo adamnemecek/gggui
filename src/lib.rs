@@ -158,20 +158,20 @@ impl Ui {
                             if w_id == id {
                                 state.downcast_ref::<W::State>().unwrap().clone()
                             } else {
-                                W::default()
+                                W::State::default()
                             }
                         },
-                        &None => W::default(),
+                        &None => W::State::default(),
                     },
                 StateType::Persistent => self.state
                     .entry(w_id.to_string())
-                    .or_insert(Box::new(W::default()))
+                    .or_insert(Box::new(W::State::default()))
                     .downcast_ref::<W::State>()
                     .unwrap()
                     .clone(),
             }
         } else {
-            W::default()
+            W::State::default()
         }
     }
 

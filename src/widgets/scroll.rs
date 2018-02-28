@@ -106,13 +106,15 @@ impl<'a> Scroll<'a> {
 
 impl WidgetState for ScrollState { }
 
+impl Default for ScrollState {
+    fn default() -> Self {
+        ScrollState::Idle
+    }
+}
+
 impl<'a> Widget for Scroll<'a> {
     type Result = ();
     type State = ScrollState;
-
-    fn default() -> Self::State {
-        ScrollState::Idle
-    }
 
     fn measure(&self, _: &Self::State, _: Option<Rect>) -> Option<Rect> {
         self.size
