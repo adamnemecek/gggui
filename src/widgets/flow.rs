@@ -101,32 +101,57 @@ impl Widget for Flow {
     }
 
     fn measure(&self, _state: &Self::State, layout: Option<Rect>) -> Option<Rect> {
-        let layout = layout.or(self.size).unwrap_or(Rect::from_wh(0.0, 0.0));
-        self.size
-            .and_then(|s| Some(s))
-            .or_else(|| {
-                match self.style {
-                    FlowStyle::LinearRight(Align::Begin) |
-                    FlowStyle::LinearDown(Align::Begin) |
-                    FlowStyle::LinearLeft(Align::Begin) |
-                    FlowStyle::LinearUp(Align::Begin) => 
-                        Some(Rect::from_wh(self.cursor.0, self.cursor.1)),
+        let available = layout.or(self.size).unwrap_or(Rect::from_wh(0.0, 0.0));
+        let size = self.size.unwrap_or(Rect::from_wh(0.0, 0.0));
 
-                    FlowStyle::LinearRight(_) | FlowStyle::LinearLeft(_) =>
-                        Some(Rect::from_wh(self.cursor.0, layout.height())),
+        match self.style {
+            FlowStyle::LinearRight(Align::Begin) |
+            FlowStyle::LinearDown(Align::Begin) => 
+                Some(Rect::from_xywh(
+                    size.left, 
+                    size.top, 
+                    size.width().max(self.cursor.0), 
+                    size.height().max(self.cursor.1)
+                )),
 
-                    FlowStyle::LinearDown(_) | FlowStyle::LinearUp(_) => 
-                        Some(Rect::from_wh(layout.width(), self.cursor.1)),
+            FlowStyle::LinearLeft(_) |
+            FlowStyle::LinearUp(_) =>
+                Some(size),
 
-                    FlowStyle::GridHorizontal(_) => 
-                        Some(Rect::from_wh(layout.width(), self.cursor.1 + self.advance)),
+            FlowStyle::LinearRight(_) =>
+                Some(Rect::from_xywh(
+                    size.left, 
+                    size.top, 
+                    size.width().max(self.cursor.0), 
+                    available.height()
+                )),
 
-                    FlowStyle::GridVertical(_) => 
-                        Some(Rect::from_wh(self.cursor.0 + self.advance, layout.height())),
+            FlowStyle::LinearDown(_) => 
+                Some(Rect::from_xywh(
+                    size.left, 
+                    size.top, 
+                    available.width(), 
+                    size.height().max(self.cursor.1)
+                )),
 
-                    _ => self.size,
-                }
-            })
+            FlowStyle::GridHorizontal(_) => 
+                Some(Rect::from_xywh(
+                    size.left, 
+                    size.top, 
+                    available.width(), 
+                    size.height().max(self.cursor.1 + self.advance)
+                )),
+
+            FlowStyle::GridVertical(_) => 
+                Some(Rect::from_xywh(
+                    size.left, 
+                    size.top, 
+                    size.width().max(self.cursor.0 + self.advance), 
+                    available.height()
+                )),
+
+            _ => self.size,
+        }
     }
 
     fn estimate(
@@ -147,6 +172,12 @@ impl Widget for Flow {
         let layout = match &self.background {
             &Background::Patch(ref patch, _) => patch.content_rect(layout),
             _ => layout
+        };
+
+        let direction = match self.style {
+            FlowStyle::LinearUp(_) |
+            FlowStyle::LinearLeft(_) => -1.0,
+            _ => 1.0,
         };
 
         match self.style {
@@ -172,11 +203,21 @@ impl Widget for Flow {
                                 layout.right - self.pad
                             ),
                         };
-                        Rect {
-                            left: clamp(l, (layout.left+self.pad, layout.right-self.pad)),
-                            right: clamp(r, (layout.left+self.pad, layout.right-self.pad)),
-                            top: self.pad + layout.top + self.cursor.1,
-                            bottom: self.pad + layout.top + self.cursor.1 + child.height()
+
+                        if direction > 0.0 {
+                            Rect {
+                                left: clamp(l, (layout.left+self.pad, layout.right-self.pad)),
+                                right: clamp(r, (layout.left+self.pad, layout.right-self.pad)),
+                                top: layout.top + self.pad + self.cursor.1,
+                                bottom: layout.top + self.pad + self.cursor.1 + child.height(),
+                            }
+                        } else {
+                            Rect {
+                                left: clamp(l, (layout.left+self.pad, layout.right-self.pad)),
+                                right: clamp(r, (layout.left+self.pad, layout.right-self.pad)),
+                                top: layout.bottom - self.pad - self.cursor.1 - child.height(),
+                                bottom: layout.bottom - self.pad - self.cursor.1,
+                            }
                         }
                     });
 
@@ -208,11 +249,20 @@ impl Widget for Flow {
                             ),
                         };
 
-                        Rect {
-                            left: self.pad + layout.left + self.cursor.0,
-                            right: self.pad + layout.left + self.cursor.0 + child.width(),
-                            top: clamp(t, (layout.top+self.pad, layout.bottom-self.pad)),
-                            bottom: clamp(b, (layout.top+self.pad, layout.bottom-self.pad)),
+                        if direction > 0.0 {
+                            Rect {
+                                left: layout.left + self.pad + self.cursor.0,
+                                right: layout.left + self.pad + self.cursor.0 + child.width(),
+                                top: clamp(t, (layout.top+self.pad, layout.bottom-self.pad)),
+                                bottom: clamp(b, (layout.top+self.pad, layout.bottom-self.pad)),
+                            }
+                        } else {
+                            Rect {
+                                left: layout.right - self.pad - self.cursor.0 - child.width(),
+                                right: layout.right - self.pad - self.cursor.0,
+                                top: clamp(t, (layout.top+self.pad, layout.bottom-self.pad)),
+                                bottom: clamp(b, (layout.top+self.pad, layout.bottom-self.pad)),
+                            }
                         }
                     });
 
