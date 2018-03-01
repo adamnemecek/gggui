@@ -12,7 +12,7 @@ pub trait Style {
     fn radio<'a, T: Clone+PartialEq+'a>(&self, val: &'a mut T, target: T) -> Toggle<'a, T>;
     fn button(&self) -> Button;
     fn flow(&self) -> Flow;
-    fn scroll<'a>(&self, scroll: &'a mut (f32, f32)) -> Scroll<'a>;
+    fn scroll(&self) -> Scroll;
     fn input<'a>(&self, txt: &'a mut String) -> Input<'a>;
     fn text(&self, txt: &str) -> Text;
     fn window(&self, w: f32, h: f32) -> WindowProperties;

@@ -21,6 +21,7 @@ pub use self::lable::*;
 pub use self::menu::*;
 pub use self::window::*;
 
+#[derive(PartialEq)]
 pub enum StateType {
     Focus,
     Persistent
@@ -127,7 +128,7 @@ pub trait Widget {
 
     fn layout(
         &mut self, 
-        state: &Self::State, 
+        state: &mut Self::State, 
         layout: Rect, 
         child: WidgetMeasure
     ) -> Rect {

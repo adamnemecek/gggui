@@ -153,9 +153,8 @@ impl Style for Default {
         Flow::new()
     }
 
-    fn scroll<'a>(&self, scroll: &'a mut (f32, f32)) -> Scroll<'a> {
+    fn scroll(&self) -> Scroll {
         Scroll::new(
-            scroll,
             self.scroll_bg_h.clone(),
             self.scroll_bg_v.clone(),
             self.scroll_bar_h.clone(),

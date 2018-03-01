@@ -113,6 +113,14 @@ impl Widget for Flow {
                     size.width().max(self.cursor.0), 
                     size.height().max(self.cursor.1)
                 )),
+            FlowStyle::LinearLeft(Align::Begin) |
+            FlowStyle::LinearUp(Align::Begin) =>
+                Some(Rect {
+                    left:   size.left.min(size.right - self.cursor.0), 
+                    top:    size.top.min(size.bottom - self.cursor.1), 
+                    right:  size.left + size.width(), 
+                    bottom: size.top + size.height(),
+                }),
 
             FlowStyle::LinearLeft(_) |
             FlowStyle::LinearUp(_) =>
@@ -160,12 +168,12 @@ impl Widget for Flow {
         layout: Rect,
         child: WidgetMeasure
     ) -> Rect {
-        self.clone().layout(state, layout, child)
+        self.clone().layout(&mut state.clone(), layout, child)
     }
 
     fn layout(
         &mut self, 
-        _state: &Self::State, 
+        _state: &mut Self::State, 
         layout: Rect, 
         child: WidgetMeasure
     ) -> Rect {

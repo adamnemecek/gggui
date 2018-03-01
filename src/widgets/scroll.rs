@@ -1,7 +1,13 @@
 use super::*;
 
 #[derive(Clone,Copy,PartialEq)]
-pub enum ScrollState {
+pub struct ScrollState {
+    scroll: (f32, f32),
+    inner: ScrollStateInner,
+}
+
+#[derive(Clone,Copy,PartialEq)]
+pub enum ScrollStateInner {
     Idle,
     HoverContent,
     HoverH(f32),
@@ -10,8 +16,7 @@ pub enum ScrollState {
     ScrollV(f32),
 }
 
-pub struct Scroll<'a> {
-    pub scroll: &'a mut (f32, f32),
+pub struct Scroll {
     pub background_h: Patch,
     pub background_v: Patch,
     pub bar_h: Patch,
@@ -22,16 +27,14 @@ pub struct Scroll<'a> {
     content: (f32, f32),
 }
 
-impl<'a> Scroll<'a> {
+impl Scroll {
     pub fn new(
-        scroll: &'a mut (f32, f32), 
         bg_h: Patch, 
         bg_v: Patch, 
         bar_h: Patch, 
         bar_v: Patch
     ) -> Scroll {
         Scroll {
-            scroll: scroll,
             background_h: bg_h,
             background_v: bg_v,
             bar_h: bar_h,
@@ -108,13 +111,20 @@ impl WidgetState for ScrollState { }
 
 impl Default for ScrollState {
     fn default() -> Self {
-        ScrollState::Idle
+        ScrollState{
+            scroll: (0.0, 0.0),
+            inner: ScrollStateInner::Idle
+        }
     }
 }
 
-impl<'a> Widget for Scroll<'a> {
+impl Widget for Scroll {
     type Result = ();
     type State = ScrollState;
+
+    fn state_type() -> StateType { 
+        StateType::Persistent 
+    }
 
     fn measure(&self, _: &Self::State, _: Option<Rect>) -> Option<Rect> {
         self.size
@@ -122,23 +132,23 @@ impl<'a> Widget for Scroll<'a> {
 
     fn estimate(
         &self, 
-        _: &Self::State, 
+        state: &Self::State, 
         layout: Rect, 
         child: WidgetMeasure
     ) -> Rect {
-        self.scroll_layout(*self.scroll, layout, true, child).0
+        self.scroll_layout(state.scroll, layout, true, child).0
     }
 
     fn layout(
         &mut self, 
-        _: &Self::State, 
+        state: &mut Self::State, 
         layout: Rect, 
         child: WidgetMeasure
     ) -> Rect {
         let (layout, scroll, content) =
-            self.scroll_layout(*self.scroll, layout, false, child);
+            self.scroll_layout(state.scroll, layout, false, child);
 
-        *self.scroll = scroll;
+        state.scroll = scroll;
         self.content = content;
         layout
     }
@@ -149,34 +159,34 @@ impl<'a> Widget for Scroll<'a> {
         layout: Rect, 
         cursor: MousePosition,
         event: Event,
-        _: bool
+        _is_focused: bool
     ) -> Capture {
         let mut capture = Capture::None;
 
-        *state = match *state {
-            ScrollState::Idle => {
-                ScrollState::Idle
+        state.inner = match state.inner {
+            ScrollStateInner::Idle => {
+                ScrollStateInner::Idle
             },
-            ScrollState::HoverContent => {
-                ScrollState::HoverContent
+            ScrollStateInner::HoverContent => {
+                ScrollStateInner::HoverContent
             },
-            ScrollState::HoverH(x) => {
+            ScrollStateInner::HoverH(x) => {
                 if let Event::Press(Key::LeftMouseButton, _) = event {
                     capture = Capture::CaptureFocus(MouseStyle::Arrow);
-                    ScrollState::ScrollH(x)
+                    ScrollStateInner::ScrollH(x)
                 } else {
-                    ScrollState::HoverH(x)
+                    ScrollStateInner::HoverH(x)
                 }
             },
-            ScrollState::HoverV(y) => {
+            ScrollStateInner::HoverV(y) => {
                 if let Event::Press(Key::LeftMouseButton, _) = event {
                     capture = Capture::CaptureFocus(MouseStyle::Arrow);
-                    ScrollState::ScrollV(y)
+                    ScrollStateInner::ScrollV(y)
                 } else {
-                    ScrollState::HoverV(y)
+                    ScrollStateInner::HoverV(y)
                 }
             },
-            ScrollState::ScrollH(x) => {
+            ScrollStateInner::ScrollH(x) => {
                 capture = Capture::CaptureFocus(MouseStyle::Arrow);
 
                 let mut bar = layout.clone();
@@ -184,7 +194,7 @@ impl<'a> Widget for Scroll<'a> {
                 if self.scrollable_v {
                     bar.right = bar.right - self.background_v.image.size.width();
                 }
-                self.scroll.0 = handle_to_scroll(
+                state.scroll.0 = handle_to_scroll(
                     bar.left, 
                     cursor.x-x, 
                     bar.width(), 
@@ -192,12 +202,12 @@ impl<'a> Widget for Scroll<'a> {
                 );
 
                 if let Event::Release(Key::LeftMouseButton, _) = event {
-                    ScrollState::Idle
+                    ScrollStateInner::Idle
                 } else {
-                    ScrollState::ScrollH(x)
+                    ScrollStateInner::ScrollH(x)
                 }
             },
-            ScrollState::ScrollV(y) => {
+            ScrollStateInner::ScrollV(y) => {
                 capture = Capture::CaptureFocus(MouseStyle::Arrow);
 
                 let mut bar = layout.clone();
@@ -205,7 +215,7 @@ impl<'a> Widget for Scroll<'a> {
                 if self.scrollable_h {
                     bar.bottom = bar.bottom - self.background_h.image.size.height();
                 }
-                self.scroll.1 = handle_to_scroll(
+                state.scroll.1 = handle_to_scroll(
                     bar.top, 
                     cursor.y-y, 
                     bar.height(), 
@@ -213,17 +223,17 @@ impl<'a> Widget for Scroll<'a> {
                 );
 
                 if let Event::Release(Key::LeftMouseButton, _) = event {
-                    ScrollState::Idle
+                    ScrollStateInner::Idle
                 } else {
-                    ScrollState::ScrollV(y)
+                    ScrollStateInner::ScrollV(y)
                 }
             },
         };
 
-        if *state != ScrollState::Idle {
+        if state.inner != ScrollStateInner::Idle {
             if let Event::Scroll(dx, dy) = event {
-                self.scroll.0 = (self.scroll.0 - dx).max(0.0).min(self.content.0);
-                self.scroll.1 = (self.scroll.1 - dy).max(0.0).min(self.content.1);
+                state.scroll.0 = (state.scroll.0 - dx).max(0.0).min(self.content.0);
+                state.scroll.1 = (state.scroll.1 - dy).max(0.0).min(self.content.1);
             }
         }
 
@@ -236,9 +246,9 @@ impl<'a> Widget for Scroll<'a> {
         layout: Rect, 
         cursor: MousePosition
     ) -> Hover {
-        match *state {
-            ScrollState::ScrollH(_) |
-            ScrollState::ScrollV(_) => {
+        match state.inner {
+            ScrollStateInner::ScrollH(_) |
+            ScrollStateInner::ScrollV(_) => {
                 Hover::HoverIdle
             },
             _ => {
@@ -251,7 +261,7 @@ impl<'a> Widget for Scroll<'a> {
 
                     let handle_range = handle_range(
                         bar.left, 
-                        self.scroll.0, 
+                        state.scroll.0, 
                         bar.width(), 
                         self.content.0
                     );
@@ -259,7 +269,7 @@ impl<'a> Widget for Scroll<'a> {
                     bar.right = handle_range.1;
 
                     if cursor.inside(&bar) {
-                        *state = ScrollState::HoverH(cursor.x - bar.left);
+                        state.inner = ScrollStateInner::HoverH(cursor.x - bar.left);
                         return Hover::HoverIdle;
                     }
                 }
@@ -273,7 +283,7 @@ impl<'a> Widget for Scroll<'a> {
 
                     let handle_range = handle_range(
                         bar.top, 
-                        self.scroll.1, 
+                        state.scroll.1, 
                         bar.height(), 
                         self.content.1
                     );
@@ -281,16 +291,16 @@ impl<'a> Widget for Scroll<'a> {
                     bar.bottom = handle_range.1;
 
                     if cursor.inside(&bar) {
-                        *state = ScrollState::HoverV(cursor.y - bar.top);
+                        state.inner = ScrollStateInner::HoverV(cursor.y - bar.top);
                         return Hover::HoverIdle;
                     }
                 }
 
                 if cursor.inside(&layout) {
-                    *state = ScrollState::HoverContent;
+                    state.inner = ScrollStateInner::HoverContent;
                     Hover::HoverIdle
                 } else {
-                    *state = ScrollState::Idle;
+                    state.inner = ScrollStateInner::Idle;
                     Hover::NoHover
                 }
             },
@@ -301,7 +311,7 @@ impl<'a> Widget for Scroll<'a> {
         submit(Primitive::PushClip(layout));
     }
 
-    fn postdraw<F: FnMut(Primitive)>(&self, _state: &Self::State, layout: Rect, mut submit: F) {
+    fn postdraw<F: FnMut(Primitive)>(&self, state: &Self::State, layout: Rect, mut submit: F) {
         // draw h scroll
         if self.scrollable_h {
             let mut bar = layout.clone();
@@ -312,7 +322,7 @@ impl<'a> Widget for Scroll<'a> {
 
             submit(Primitive::Draw9(self.background_h.clone(), bar, Color::white()));
 
-            let handle_range = handle_range(bar.left, self.scroll.0, bar.width(), self.content.0);
+            let handle_range = handle_range(bar.left, state.scroll.0, bar.width(), self.content.0);
             bar.left = handle_range.0;
             bar.right = handle_range.1;
 
@@ -329,7 +339,7 @@ impl<'a> Widget for Scroll<'a> {
 
             submit(Primitive::Draw9(self.background_v.clone(), bar, Color::white()));
 
-            let handle_range = handle_range(bar.top, self.scroll.1, bar.height(), self.content.1);
+            let handle_range = handle_range(bar.top, state.scroll.1, bar.height(), self.content.1);
             bar.top = handle_range.0;
             bar.bottom = handle_range.1;
 

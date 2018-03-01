@@ -197,6 +197,9 @@ impl Ui {
                     }
                 },
                 StateType::Persistent => {
+                    if is_focused {
+                        self.focus = Some((w_id.to_string(), Box::new(new_state.clone())));
+                    }
                     self.state.insert(w_id.to_string(), Box::new(new_state));
                 },
             }
