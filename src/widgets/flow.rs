@@ -7,8 +7,10 @@ pub enum Align {
 
 #[derive(Clone,Copy,Debug)]
 pub enum FlowStyle {
-    LinearHorizontal(Align),
-    LinearVertical(Align),
+    LinearRight(Align),
+    LinearLeft(Align),
+    LinearDown(Align),
+    LinearUp(Align),
     GridHorizontal(u32),
     GridVertical(u32),
     Single(Align, Align),
@@ -104,14 +106,16 @@ impl Widget for Flow {
             .and_then(|s| Some(s))
             .or_else(|| {
                 match self.style {
-                    FlowStyle::LinearHorizontal(Align::Begin) |
-                    FlowStyle::LinearVertical(Align::Begin) => 
+                    FlowStyle::LinearRight(Align::Begin) |
+                    FlowStyle::LinearDown(Align::Begin) |
+                    FlowStyle::LinearLeft(Align::Begin) |
+                    FlowStyle::LinearUp(Align::Begin) => 
                         Some(Rect::from_wh(self.cursor.0, self.cursor.1)),
 
-                    FlowStyle::LinearHorizontal(_) =>
+                    FlowStyle::LinearRight(_) | FlowStyle::LinearLeft(_) =>
                         Some(Rect::from_wh(self.cursor.0, layout.height())),
 
-                    FlowStyle::LinearVertical(_) => 
+                    FlowStyle::LinearDown(_) | FlowStyle::LinearUp(_) => 
                         Some(Rect::from_wh(layout.width(), self.cursor.1)),
 
                     FlowStyle::GridHorizontal(_) => 
@@ -146,67 +150,71 @@ impl Widget for Flow {
         };
 
         match self.style {
-            FlowStyle::LinearVertical(align) => {
+            FlowStyle::LinearDown(align) | FlowStyle::LinearUp(align) => {
                 let available_space = Rect::from_wh(
                     layout.width()-self.pad*2.0, 
                     layout.height()-self.cursor.1-self.pad
                 );
-                let r = child(Some(available_space)).map_or(layout, |child| {
-                    let (l, r) = match align {
-                        Align::Begin => (
-                            self.pad+layout.left, 
-                            self.pad+layout.left + child.width()
-                        ),
-                        Align::Middle => (
-                            (layout.left+layout.right-child.width())*0.5, 
-                            (layout.left+layout.right+child.width())*0.5
-                        ),
-                        Align::End => (
-                            layout.right - self.pad - child.width(),
-                            layout.right - self.pad
-                        ),
-                    };
-                    Rect {
-                        left: clamp(l, (layout.left+self.pad, layout.right-self.pad)),
-                        right: clamp(r, (layout.left+self.pad, layout.right-self.pad)),
-                        top: self.pad + layout.top + self.cursor.1,
-                        bottom: self.pad + layout.top + self.cursor.1 + child.height()
-                    }
-                });
+                let r = child(Some(available_space))
+                    .or(Some(available_space))
+                    .map_or(layout, |child| {
+                        let (l, r) = match align {
+                            Align::Begin => (
+                                self.pad+layout.left, 
+                                self.pad+layout.left + child.width()
+                            ),
+                            Align::Middle => (
+                                (layout.left+layout.right-child.width())*0.5, 
+                                (layout.left+layout.right+child.width())*0.5
+                            ),
+                            Align::End => (
+                                layout.right - self.pad - child.width(),
+                                layout.right - self.pad
+                            ),
+                        };
+                        Rect {
+                            left: clamp(l, (layout.left+self.pad, layout.right-self.pad)),
+                            right: clamp(r, (layout.left+self.pad, layout.right-self.pad)),
+                            top: self.pad + layout.top + self.cursor.1,
+                            bottom: self.pad + layout.top + self.cursor.1 + child.height()
+                        }
+                    });
 
                 self.cursor.0 = self.cursor.0.max(r.width());
                 self.cursor.1 += r.height() + self.v_gap;
                 r.round()
             },
 
-            FlowStyle::LinearHorizontal(align) => {
+            FlowStyle::LinearRight(align) | FlowStyle::LinearLeft(align) => {
                 let available_space = Rect::from_wh(
                     layout.width()-self.cursor.0-self.pad, 
                     layout.height()-self.pad*2.0
                 );
-                let r = child(Some(available_space)).map_or(layout, |child| {
-                    let (t, b) = match align {
-                        Align::Begin => (
-                            self.pad+layout.top, 
-                            self.pad+layout.top + child.height()
-                        ),
-                        Align::Middle => (
-                            (layout.top+layout.bottom-child.height())*0.5, 
-                            (layout.top+layout.bottom+child.height())*0.5
-                        ),
-                        Align::End => (
-                            layout.bottom - self.pad - child.height(),
-                            layout.bottom - self.pad
-                        ),
-                    };
+                let r = child(Some(available_space))
+                    .or(Some(available_space))
+                    .map_or(available_space, |child| {
+                        let (t, b) = match align {
+                            Align::Begin => (
+                                self.pad+layout.top, 
+                                self.pad+layout.top + child.height()
+                            ),
+                            Align::Middle => (
+                                (layout.top+layout.bottom-child.height())*0.5, 
+                                (layout.top+layout.bottom+child.height())*0.5
+                            ),
+                            Align::End => (
+                                layout.bottom - self.pad - child.height(),
+                                layout.bottom - self.pad
+                            ),
+                        };
 
-                    Rect {
-                        left: self.pad + layout.left + self.cursor.0,
-                        right: self.pad + layout.left + self.cursor.0 + child.width(),
-                        top: clamp(t, (layout.top+self.pad, layout.bottom-self.pad)),
-                        bottom: clamp(b, (layout.top+self.pad, layout.bottom-self.pad)),
-                    }
-                });
+                        Rect {
+                            left: self.pad + layout.left + self.cursor.0,
+                            right: self.pad + layout.left + self.cursor.0 + child.width(),
+                            top: clamp(t, (layout.top+self.pad, layout.bottom-self.pad)),
+                            bottom: clamp(b, (layout.top+self.pad, layout.bottom-self.pad)),
+                        }
+                    });
 
                 self.cursor.0 += r.width() + self.h_gap;
                 self.cursor.1 = self.cursor.1.max(r.height());
