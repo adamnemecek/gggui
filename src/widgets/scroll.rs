@@ -24,7 +24,7 @@ pub struct Scroll {
     pub size: Option<Rect>,
     pub scrollable_h: bool,
     pub scrollable_v: bool,
-    content: (f32, f32),
+    content: (f32, f32, f32, f32),
 }
 
 impl Scroll {
@@ -42,7 +42,7 @@ impl Scroll {
             size: None,
             scrollable_h: true,
             scrollable_v: true,
-            content: (0.0, 0.0),
+            content: (0.0, 0.0, 0.0, 0.0),
         }
     }
 
@@ -63,7 +63,7 @@ impl Scroll {
         mut layout: Rect,
         estimate: bool,
         child: WidgetMeasure
-    ) -> (Rect, (f32,f32), (f32,f32)) {
+    ) -> (Rect, (f32,f32), (f32,f32,f32,f32)) {
         if self.scrollable_h {
             layout.bottom = layout.bottom - self.background_h.image.size.height();
         }
@@ -76,31 +76,40 @@ impl Scroll {
 
         if measured.is_some() {
             let measured = measured.unwrap();
-            let h_bar_size = self.background_h.image.size.width();
-            let v_bar_size = self.background_v.image.size.height();
+            let h_bar_size = if self.scrollable_h {
+                self.background_h.image.size.height()
+            } else {
+                0.0
+            };
+            let v_bar_size = if self.scrollable_v {
+                self.background_v.image.size.width()
+            } else {
+                0.0
+            };
 
-            content = (0.0, 0.0);
+            content = (0.0, 0.0, 0.0, 0.0);
             if measured.width() > layout.width() && self.scrollable_h {
-                content.0 = measured.width() - (layout.width()-h_bar_size);
+                content.0 = measured.left - layout.left;
+                content.1 = content.0 + measured.width() - (layout.width()-v_bar_size);
+                content.1 = content.1.max(content.0);
             }
             if measured.height() > layout.height() && self.scrollable_v {
-                content.1 = measured.height() - (layout.height()-v_bar_size);
+                content.2 = measured.top - layout.top;
+                content.3 = content.2 + measured.height() - (layout.height()-h_bar_size);
+                content.3 = content.3.max(content.2);
             }
 
             if !estimate {
-                scroll.0 = scroll.0.min(content.0);
-                scroll.1 = scroll.1.min(content.1);
+                scroll.0 = scroll.0.max(content.0).min(content.1);
+                scroll.1 = scroll.1.max(content.2).min(content.3);
             }
 
-            (
-                measured.size().translate(layout.left - scroll.0, layout.top - scroll.1), 
-                scroll, 
-                content
-            )
+            let layout = measured.size().translate(layout.left - scroll.0, layout.top - scroll.1);
+            (layout, scroll, content)
         } else {
             scroll.0 = 0.0;
             scroll.1 = 0.0;
-            content = (0.0, 0.0);
+            content = (0.0, 0.0, 0.0, 0.0);
             
             (layout, scroll, content)
         }
@@ -198,7 +207,8 @@ impl Widget for Scroll {
                     bar.left, 
                     cursor.x-x, 
                     bar.width(), 
-                    self.content.0
+                    self.content.0,
+                    self.content.1
                 );
 
                 if let Event::Release(Key::LeftMouseButton, _) = event {
@@ -219,7 +229,8 @@ impl Widget for Scroll {
                     bar.top, 
                     cursor.y-y, 
                     bar.height(), 
-                    self.content.1
+                    self.content.2,
+                    self.content.3
                 );
 
                 if let Event::Release(Key::LeftMouseButton, _) = event {
@@ -232,8 +243,8 @@ impl Widget for Scroll {
 
         if state.inner != ScrollStateInner::Idle {
             if let Event::Scroll(dx, dy) = event {
-                state.scroll.0 = (state.scroll.0 - dx).max(0.0).min(self.content.0);
-                state.scroll.1 = (state.scroll.1 - dy).max(0.0).min(self.content.1);
+                state.scroll.0 = (state.scroll.0 - dx).max(self.content.0).min(self.content.1);
+                state.scroll.1 = (state.scroll.1 - dy).max(self.content.2).min(self.content.3);
             }
         }
 
@@ -263,7 +274,8 @@ impl Widget for Scroll {
                         bar.left, 
                         state.scroll.0, 
                         bar.width(), 
-                        self.content.0
+                        self.content.0, 
+                        self.content.1
                     );
                     bar.left = handle_range.0;
                     bar.right = handle_range.1;
@@ -285,7 +297,8 @@ impl Widget for Scroll {
                         bar.top, 
                         state.scroll.1, 
                         bar.height(), 
-                        self.content.1
+                        self.content.2,
+                        self.content.3
                     );
                     bar.top = handle_range.0;
                     bar.bottom = handle_range.1;
@@ -322,7 +335,8 @@ impl Widget for Scroll {
 
             submit(Primitive::Draw9(self.background_h.clone(), bar, Color::white()));
 
-            let handle_range = handle_range(bar.left, state.scroll.0, bar.width(), self.content.0);
+            let handle_range = 
+                handle_range(bar.left, state.scroll.0, bar.width(), self.content.0, self.content.1);
             bar.left = handle_range.0;
             bar.right = handle_range.1;
 
@@ -339,7 +353,8 @@ impl Widget for Scroll {
 
             submit(Primitive::Draw9(self.background_v.clone(), bar, Color::white()));
 
-            let handle_range = handle_range(bar.top, state.scroll.1, bar.height(), self.content.1);
+            let handle_range = 
+                handle_range(bar.top, state.scroll.1, bar.height(), self.content.2, self.content.3);
             bar.top = handle_range.0;
             bar.bottom = handle_range.1;
 
@@ -364,14 +379,16 @@ impl Widget for Scroll {
     }
 }
 
-fn handle_to_scroll(offset: f32, x: f32, length: f32, content: f32) -> f32 {
-    let range = handle_range(offset, content, length, content);
+fn handle_to_scroll(offset: f32, x: f32, length: f32, min: f32, max: f32) -> f32 {
+    let content = max-min;
+    let range = handle_range(offset, max, length, min, max);
     let pos = (x-offset)/(range.0-offset);
-    (pos * content).max(0.0).min(content).floor()
+    (min+pos*content).max(min).min(max).floor()
 }
 
-fn handle_range(offset: f32, x: f32, length: f32, content: f32) -> (f32, f32) { 
+fn handle_range(offset: f32, x: f32, length: f32, min: f32, max: f32) -> (f32, f32) { 
+    let content = max-min;
     let size = length * (length / (length+content));
-    let start = length * (x / (length+content));
+    let start = length * ((x-min) / (length+content));
     ((offset+start).floor(), (offset+start+size).floor())
 }
