@@ -67,6 +67,7 @@ pub struct UiContext<'a> {
     capture: Capture,
     mouse_style: Option<MouseStyle>,
     cursor: MousePosition,
+    visibility: Rect,
     viewport: Rect,
     enabled: bool,
 }
@@ -144,6 +145,7 @@ impl Ui {
             capture: Capture::None,
             mouse_style: None,
             cursor: cursor,
+            visibility: viewport,
             viewport: viewport,
             enabled: enabled,
         }
@@ -213,6 +215,7 @@ impl<'a> UiContext<'a> {
         parent: Box<Layout+'b>, 
         events: EventVec,
         cursor: MousePosition,
+        visibility: Rect,
         enabled: bool,
         drawlist_sub: bool
     ) -> UiContext<'b> {
@@ -231,6 +234,7 @@ impl<'a> UiContext<'a> {
             capture: self.capture,
             mouse_style: None,
             cursor: cursor,
+            visibility,
             viewport: self.viewport,
             enabled: enabled,
         }
@@ -310,6 +314,7 @@ impl<'a> UiContext<'a> {
                 capture: Capture::None,
                 mouse_style: None,
                 cursor: self.cursor.expand(&size),
+                visibility: size,
                 viewport: self.viewport,
                 enabled: enabled
             };
@@ -376,13 +381,34 @@ impl<'a> UiContext<'a> {
 
         //--------------------------------------------------------------------------------------//
         // handle layouting
-        let layout = self.parent.estimate(Box::new(|layout| widget.measure(&state, layout)));
+        let has_dynamic_size = match widget.child_area(&state, Rect::from_wh(0.0, 0.0)) {
+            ChildArea::ConfineContentAndInput(_) |
+            ChildArea::None => {
+                false
+            },
+            _ => true,
+        };
+
+        let mut cached_measurement = None;
+
+        let layout = self.parent.estimate(&mut |layout| {
+            cached_measurement = Some(widget.measure(&state, layout));
+            cached_measurement.clone().unwrap()
+        });
+
+        if !has_dynamic_size && layout.intersect(&self.visibility).is_none() {
+            self.parent.layout(&mut |_| {
+                cached_measurement.clone().unwrap()
+            });
+            return widget.result(&state);
+        }
 
         //--------------------------------------------------------------------------------------//
         // handle tabstops
         if W::tabstop() && id != "" && enabled {
             if self.ui.focus.is_none() && widget.autofocus() { 
                 is_focused = true;
+                self.capture = Capture::CaptureFocus(MouseStyle::Arrow);
             }
             if self.capture == Capture::FocusNext && 
                 self.ui.focus_to_tabstop.is_none() {
@@ -398,6 +424,7 @@ impl<'a> UiContext<'a> {
                 self.ui.focus_to_tabstop = None;
                 self.ui.previous_capture = Capture::None;
                 is_focused = true;
+                self.capture = Capture::CaptureFocus(MouseStyle::Arrow);
             }
         }
 
@@ -434,10 +461,12 @@ impl<'a> UiContext<'a> {
 
                 cursor.visibility.map_or((Capture::None, None), |vis| {
                     let (capture, mouse_style, new_drawlist) = {
+                        let content_vis = if clip_vis { vis } else { self.visibility };
                         let mut sub = self.sub(
                             Box::new(layouter), 
                             events, 
-                            cursor, 
+                            cursor,
+                            content_vis,
                             enabled,
                             drawlist_sub
                         );
@@ -536,7 +565,13 @@ impl<'a> UiContext<'a> {
 
         // apply final layout. Parent will measure this widget again but now
         //  we know how much content there is including children
-        self.parent.layout(Box::new(|layout| widget.measure(&state, layout)));
+        self.parent.layout(&mut |layout| {
+            if has_dynamic_size {
+                widget.measure(&state, layout)
+            } else {
+                cached_measurement.clone().unwrap()
+            }
+        });
 
         widget.result(&state)
     }

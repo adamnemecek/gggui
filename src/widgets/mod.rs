@@ -90,7 +90,7 @@ impl Default for GenericWidgetState {
     }
 }
 
-pub type WidgetMeasure<'a> = Box<Fn(Option<Rect>)->Option<Rect>+'a>;
+pub type WidgetMeasure<'a> = &'a mut FnMut(Option<Rect>)->Option<Rect>;
 
 #[allow(unused_variables)]
 pub trait Widget {
