@@ -116,6 +116,7 @@ impl Style for Default {
             size: None,
             text: None,
             text_color: Color{ r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            triggered: false,
         }
     }
 

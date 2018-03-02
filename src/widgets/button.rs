@@ -2,9 +2,9 @@ use super::*;
 
 #[derive(Clone,Copy,Debug,PartialEq)]
 pub enum ButtonState {
-    Pressed,
-    Unpressed,
+    Idle,
     Hovered,
+    Pressed,    
     Triggered,
 }
 
@@ -15,6 +15,7 @@ pub struct Button {
     pub size: Option<Rect>,
     pub text: Option<Text>,
     pub text_color: Color,
+    pub triggered: bool,
 }
 
 impl Button {
@@ -38,7 +39,7 @@ impl WidgetState for ButtonState { }
 
 impl Default for ButtonState {
     fn default() -> Self {
-        ButtonState::Unpressed
+        ButtonState::Idle
     }
 }
 
@@ -75,16 +76,16 @@ impl Widget for Button {
         let mut capture = Capture::None;
 
         *state = match *state {
-            ButtonState::Unpressed => {
+            ButtonState::Idle => {
                 if is_focused {
                     if let Event::Press(Key::Space, _) = event {
                         capture = Capture::CaptureFocus(MouseStyle::ArrowClicking);
                         ButtonState::Pressed
                     } else {
-                        ButtonState::Unpressed
+                        ButtonState::Idle
                     }
                 } else {
-                    ButtonState::Unpressed
+                    ButtonState::Idle
                 }
             },
             ButtonState::Hovered => {
@@ -100,12 +101,14 @@ impl Widget for Button {
                 match event {
                     Event::Release(Key::LeftMouseButton, _) => {
                         if cursor.inside(&layout) {
+                            self.triggered = true;
                             ButtonState::Triggered
                         } else {
-                            ButtonState::Unpressed
+                            ButtonState::Idle
                         }
                     },
                     Event::Release(Key::Space, _) => {
+                        self.triggered = true;
                         ButtonState::Triggered
                     },
                     _ => {
@@ -114,7 +117,7 @@ impl Widget for Button {
                 }
             },
             ButtonState::Triggered => {
-                ButtonState::Unpressed
+                ButtonState::Triggered
             },
         };
 
@@ -128,17 +131,17 @@ impl Widget for Button {
         cursor: MousePosition
     ) -> Hover {
         if *state == ButtonState::Triggered {
-            *state = ButtonState::Unpressed;
+            *state = ButtonState::Idle;
         }
 
         if cursor.inside(&layout) {
-            if *state == ButtonState::Unpressed {
+            if *state == ButtonState::Idle {
                 *state = ButtonState::Hovered;
             }
             Hover::HoverActive(MouseStyle::ArrowClickable)
         } else {
             if *state == ButtonState::Hovered {
-                *state = ButtonState::Unpressed;
+                *state = ButtonState::Idle;
             }
             Hover::NoHover
         }
@@ -148,7 +151,7 @@ impl Widget for Button {
         let tx = Color{ r:1.0, g:1.0, b:1.0, a:1.0 };
 
         let patch = match state {
-            &ButtonState::Unpressed =>
+            &ButtonState::Idle =>
                 self.normal.clone(),
 
             &ButtonState::Hovered =>
@@ -169,8 +172,8 @@ impl Widget for Button {
         });
     }
 
-    fn result(self, state: &Self::State) -> Self::Result {
-        *state == ButtonState::Triggered
+    fn result(self, _: &Self::State) -> Self::Result {
+        self.triggered
     }
 
 }
