@@ -14,10 +14,11 @@ pub struct Input<'a> {
     pub patch: Patch,
     pub size: Option<Rect>,
     pub password: bool,
+    pub text_color: Color,
     buffer: &'a mut String,
     text: Option<Text>,
     focus: bool,
-    pub text_color: Color,
+    submit: bool,
 }
 
 impl<'a> Input<'a> {
@@ -39,10 +40,11 @@ impl<'a> Input<'a> {
             patch,
             size: None,
             password: false,
+            text_color,
             buffer: text,
             text: Some(render_text),
             focus: false,
-            text_color
+            submit: false,
         }
     }
 
@@ -89,7 +91,7 @@ impl Default for InputState {
 }
 
 impl<'a> Widget for Input<'a> {
-    type Result = &'a str;
+    type Result = bool;
     type State = InputState;
 
     fn tabstop() -> bool {
@@ -119,6 +121,29 @@ impl<'a> Widget for Input<'a> {
         let text = self.text.as_mut().unwrap();
 
         let relative_cursor = (cursor.x - content.left, cursor.y - content.top);
+
+        // sanity check on the state
+        *state = match *state {
+            InputState::Selecting(mut from, mut to, since, sx, sy) => {
+                if from > self.buffer.len() {
+                    from = self.buffer.len();
+                }
+                if to > self.buffer.len() {
+                    to = self.buffer.len();
+                }
+                InputState::Selecting(from, to, since, sx, sy)
+            },
+            InputState::Selected(mut from, mut to, since, sx, sy) => {
+                if from > self.buffer.len() {
+                    from = self.buffer.len();
+                }
+                if to > self.buffer.len() {
+                    to = self.buffer.len();
+                }
+                InputState::Selected(from, to, since, sx, sy)
+            },
+            state => state,
+        };
 
         // event related state update
         *state = match *state {
@@ -221,6 +246,12 @@ impl<'a> Widget for Input<'a> {
                             InputState::Selected(from+1, from+1, Instant::now(), sx, sy)
                         }
                     }
+                },
+
+                Event::Press(Key::Enter, Modifiers{ shift: false, .. }) => {
+                    self.submit = true;
+
+                    InputState::Selected(from, to, since, sx, sy)
                 },
 
                 Event::Press(Key::C, Modifiers{ ctrl: true, .. }) => {
@@ -452,7 +483,7 @@ impl<'a> Widget for Input<'a> {
         submit(Primitive::PopClip);
     }
 
-    fn result(self, _state: &Self::State) -> Self::Result {
-        self.buffer.as_str()
+    fn result(self, _: &Self::State) -> Self::Result {
+        self.submit
     }
 }
