@@ -58,12 +58,13 @@ impl<'a, 'b: 'a> WordWrapper<'a, 'b> {
     fn layout_word(
         &mut self,
         glyph: rusttype::ScaledGlyph<'static>, 
-        a: f32, 
-        b: f32,
+        a: f32,
+        b: f32, 
+        c: f32,
     ) {
-        if let Some((ch, glyph, a, b)) = self.iter.next() {
+        if let Some((ch, glyph, b, c)) = self.iter.next() {
             if !ch.is_whitespace() {
-                self.layout_word(glyph, a, b);
+                self.layout_word(glyph, a, b, c);
             }
         }
 
@@ -72,7 +73,7 @@ impl<'a, 'b: 'a> WordWrapper<'a, 'b> {
             self.y += self.height;
         }
 
-        (self.f)(glyph, a - self.x, b - self.x, self.y);
+        (self.f)(glyph, b - self.x, c - self.x, self.y);
     }
 }
 
@@ -129,55 +130,14 @@ impl Text {
                     height: height,
                     iter: self.char_positions(),
                     f: &mut f,
-                };                
+                };
 
                 while let Some((ch, glyph, a, b)) = wrapper.iter.next() {
                     if !ch.is_whitespace() {
-                        wrapper.layout_word(glyph, a, b);
+                        wrapper.layout_word(glyph, a, a, b);
                     }
                 }
             },
-
-            /*
-            TextWrap::WordWrap => {
-                let mut x = 0.0;
-                let mut y = line.ascent;
-                let mut word_iter = self.char_positions().peekable();
-                let mut word_started = false;
-
-                for (c, g, a, b) in self.char_positions() {
-                    if !c.is_alphanumeric() {
-                        word_iter.next();
-                        word_started = false;
-                    } else {
-                        if !word_started {
-                            word_started = true;
-                            let mut word_width = 0.0;
-                            while let Some(&(c,_,_,w)) = word_iter.peek() {
-                                if !c.is_alphanumeric() {
-                                    break;
-                                } else {
-                                    word_width = w - x;
-                                    word_iter.next();
-                                }
-                            }
-                            
-                            if word_width > width {
-                                x = a;
-                                y += -line.descent + line.line_gap + line.ascent;
-                            }
-                        }
-                    }
-
-                    if b - x > width {
-                        x = a;
-                        y += -line.descent + line.line_gap + line.ascent;
-                    }
-
-                    f(g, a - x, b - x, y);
-                }
-            },
-            */
         }
     }
 
