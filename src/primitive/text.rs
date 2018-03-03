@@ -45,6 +45,37 @@ impl<'a, 'b> Iterator for CharPositionIter<'a, 'b> {
     }
 }
 
+struct WordWrapper<'a, 'b: 'a> {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    iter: CharPositionIter<'a, 'b>,
+    f: &'a mut FnMut(rusttype::ScaledGlyph<'static>, f32, f32, f32),
+}
+
+impl<'a, 'b: 'a> WordWrapper<'a, 'b> {
+    fn layout_word(
+        &mut self,
+        glyph: rusttype::ScaledGlyph<'static>, 
+        a: f32, 
+        b: f32,
+    ) {
+        if let Some((ch, glyph, a, b)) = self.iter.next() {
+            if !ch.is_whitespace() {
+                self.layout_word(glyph, a, b);
+            }
+        }
+
+        if b-self.x > self.width {
+            self.x = a;
+            self.y += self.height;
+        }
+
+        (self.f)(glyph, a - self.x, b - self.x, self.y);
+    }
+}
+
 impl Text {
     pub fn char_positions<'a,'b>(&'b self) -> CharPositionIter<'a, 'b> {
         let scale = rusttype::Scale{ x: self.size, y: self.size };
@@ -65,8 +96,9 @@ impl Text {
         mut f: F
     ) {
         let line = self.font.0.v_metrics(rusttype::Scale{ x: self.size, y: self.size });
-
+        
         let width = rect.width();
+        let height = -line.descent + line.line_gap + line.ascent;
 
         match self.wrap {
             TextWrap::NoWrap => {
@@ -82,13 +114,31 @@ impl Text {
                 for (_, g, a, b) in self.char_positions() {
                     if b - x > width {
                         x = a;
-                        y += -line.descent + line.line_gap + line.ascent;
+                        y += height;
                     }
 
                     f(g, a - x, b - x, y);
                 }
             },
 
+            TextWrap::WordWrap => {
+                let mut wrapper = WordWrapper {
+                    x: 0.0, 
+                    y: line.ascent,
+                    width: width,
+                    height: height,
+                    iter: self.char_positions(),
+                    f: &mut f,
+                };                
+
+                while let Some((ch, glyph, a, b)) = wrapper.iter.next() {
+                    if !ch.is_whitespace() {
+                        wrapper.layout_word(glyph, a, b);
+                    }
+                }
+            },
+
+            /*
             TextWrap::WordWrap => {
                 let mut x = 0.0;
                 let mut y = line.ascent;
@@ -127,6 +177,7 @@ impl Text {
                     f(g, a - x, b - x, y);
                 }
             },
+            */
         }
     }
 
