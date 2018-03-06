@@ -48,6 +48,8 @@ impl<'a, 'b> Iterator for CharPositionIter<'a, 'b> {
 struct WordWrapper<'a, 'b: 'a> {
     x: f32,
     y: f32,
+    final_x: f32,
+    final_y: f32,
     width: f32,
     height: f32,
     iter: CharPositionIter<'a, 'b>,
@@ -61,19 +63,47 @@ impl<'a, 'b: 'a> WordWrapper<'a, 'b> {
         a: f32,
         b: f32, 
         c: f32,
+        mut word: bool,
     ) {
-        if let Some((ch, glyph, b, c)) = self.iter.next() {
-            if !ch.is_whitespace() {
-                self.layout_word(glyph, a, b, c);
+        if word {
+            self.x = self.final_x;
+            self.y = self.final_y;
+
+            if let Some((ch, glyph, b, c)) = self.iter.next() {
+                if ch.is_alphanumeric() {
+                    if c-self.x > self.width {
+                        self.x = a;
+                        self.y += self.height;
+                        word = false;
+                    }
+                    self.layout_word(glyph, a, b, c, word);
+                }
             }
-        }
 
-        if b-self.x > self.width {
-            self.x = a;
-            self.y += self.height;
-        }
+            (self.f)(glyph, b - self.x, c - self.x, self.y);
+        }  else {
+            self.final_x = self.x;
+            self.final_y = self.y;
 
-        (self.f)(glyph, b - self.x, c - self.x, self.y);
+            if c-self.final_x > self.width {
+                self.final_x = b;
+                self.final_y += self.height;
+            }
+            (self.f)(glyph, b - self.final_x, c - self.final_x, self.final_y);
+
+            while let Some((ch, glyph, b, c)) = self.iter.next() {
+                if c-self.final_x > self.width {
+                    self.final_x = b;
+                    self.final_y += self.height;
+                }
+
+                (self.f)(glyph, b - self.final_x, c - self.final_x, self.final_y);
+                
+                if !ch.is_alphanumeric() {
+                    break;
+                }
+            }
+        }             
     }
 }
 
@@ -126,6 +156,8 @@ impl Text {
                 let mut wrapper = WordWrapper {
                     x: 0.0, 
                     y: line.ascent,
+                    final_x: 0.0,
+                    final_y: line.ascent,
                     width: width,
                     height: height,
                     iter: self.char_positions(),
@@ -133,9 +165,7 @@ impl Text {
                 };
 
                 while let Some((ch, glyph, a, b)) = wrapper.iter.next() {
-                    if !ch.is_whitespace() {
-                        wrapper.layout_word(glyph, a, a, b);
-                    }
+                    wrapper.layout_word(glyph, a, a, b, ch.is_alphanumeric());
                 }
             },
         }
