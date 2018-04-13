@@ -5,6 +5,7 @@ extern crate rusttype;
 extern crate image;
 extern crate clipboard;
 
+#[cfg(feature="gfx-renderer")] #[macro_use] pub extern crate gfx;
 #[cfg(feature="vulkano-renderer")] #[macro_use] pub extern crate vulkano;
 #[cfg(feature="vulkano-renderer")] #[macro_use] pub extern crate vulkano_shader_derive;
 #[cfg(feature="winit-events")] pub extern crate winit;

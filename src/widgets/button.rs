@@ -150,6 +150,8 @@ impl Widget for Button {
     fn predraw<F: FnMut(Primitive)>(&self, state: &Self::State, layout: Rect, mut submit: F) {
         let tx = Color{ r:1.0, g:1.0, b:1.0, a:1.0 };
 
+        println!("button draw {:?}", layout);
+
         let patch = match state {
             &ButtonState::Idle =>
                 self.normal.clone(),
