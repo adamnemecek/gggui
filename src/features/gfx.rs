@@ -147,7 +147,7 @@ impl<R: gfx::Resources> Renderer<R> {
 
         // convert to gfx vertices. a bit unfortunate, but hopefully this gets optimized out.
         let vertices = vertices.into_iter().map(|v| Vertex {
-            pos: v.pos,
+            pos: [v.pos[0], 1.0 - v.pos[1]],
             uv: v.uv,
             color: v.color,
             mode: v.mode,
