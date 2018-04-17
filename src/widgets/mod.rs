@@ -220,7 +220,7 @@ impl<'a, W: Widget> Layout for LayoutCell<'a, W> {
 
 impl Layout for LayoutRoot {
     fn estimate(&self, child: WidgetMeasure) -> Rect {
-        child(None)
+        child(Some(self.viewport))
             .unwrap_or(self.viewport).size()
             .translate(self.viewport.left, self.viewport.top)
     }

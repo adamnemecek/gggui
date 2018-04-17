@@ -75,13 +75,15 @@ impl Cache {
     pub fn get_patch<L: Loadable>(&mut self, load: L) -> Patch {
         let key = load.uid();
 
-        match self.resources.get(&key) {
-            Some(entry) => match entry {
-                &CachedResource::Patch(ref patch) => return patch.clone(),
-                &CachedResource::Image(_) => panic!("Resource is of type 'Image', not 'Patch'"),
-                &CachedResource::Font(_,_) => panic!("Resource is of type 'Font', not 'Patch'"),
-            },
-            _ => (),
+        if key.len() > 0 {
+            match self.resources.get(&key) {
+                Some(entry) => match entry {
+                    &CachedResource::Patch(ref patch) => return patch.clone(),
+                    &CachedResource::Image(_) => panic!("Resource is of type 'Image', not 'Patch'"),
+                    &CachedResource::Font(_,_) => panic!("Resource is of type 'Font', not 'Patch'"),
+                },
+                _ => (),
+            }
         }
 
         let value = self.load_patch(&load);
@@ -93,13 +95,15 @@ impl Cache {
     pub fn get_image<L: Loadable>(&mut self, load: L) -> Image {
         let key = load.uid();
 
-        match self.resources.get(&key) {
-            Some(entry) => match entry {
-                &CachedResource::Image(ref image) => return image.clone(),
-                &CachedResource::Patch(_) => panic!("Resource is of type 'Patch', not 'Image'"),
-                &CachedResource::Font(_, _) => panic!("Resource is of type 'Font', not 'Image'"),
-            },
-            _ => (),
+        if key.len() > 0 {
+            match self.resources.get(&key) {
+                Some(entry) => match entry {
+                    &CachedResource::Image(ref image) => return image.clone(),
+                    &CachedResource::Patch(_) => panic!("Resource is of type 'Patch', not 'Image'"),
+                    &CachedResource::Font(_, _) => panic!("Resource is of type 'Font', not 'Image'"),
+                },
+                _ => (),
+            }
         }
 
         let value = self.load_image(&load);
@@ -111,13 +115,15 @@ impl Cache {
     pub fn get_font<L: Loadable>(&mut self, load: L) -> (Font, FontId) {
         let key = load.uid();
 
-        match self.resources.get(&key) {
-            Some(entry) => match entry {
-                &CachedResource::Font(ref font, font_id) => return (font.clone(), font_id),
-                &CachedResource::Patch(_) => panic!("Resource is of type 'Patch', not 'Font'"),
-                &CachedResource::Image(_) => panic!("Resource is of type 'Image', not 'Font'"),
-            },
-            _ => (),
+        if key.len() > 0 {
+            match self.resources.get(&key) {
+                Some(entry) => match entry {
+                    &CachedResource::Font(ref font, font_id) => return (font.clone(), font_id),
+                    &CachedResource::Patch(_) => panic!("Resource is of type 'Patch', not 'Font'"),
+                    &CachedResource::Image(_) => panic!("Resource is of type 'Image', not 'Font'"),
+                },
+                _ => (),
+            }
         }
 
         let value = self.load_font(&load);

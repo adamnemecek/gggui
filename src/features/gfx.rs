@@ -8,6 +8,8 @@ use render::DrawList;
 use render::Update;
 use render::Command;
 
+type ColorFormat = gfx::format::Srgba8;
+
 gfx_defines!{
     vertex Vertex {
         pos: [f32; 2] = "a_Pos",
@@ -23,10 +25,10 @@ gfx_defines!{
         color: gfx::TextureSampler<[f32; 4]> 
             = "t_Color",
 
-        //scissor: gfx::Scissor 
-        //    = (),
+        scissor: gfx::Scissor 
+            = (),
 
-        out_color: gfx::BlendTarget<gfx::format::Rgba8> 
+        out_color: gfx::BlendTarget<ColorFormat> 
             = ("Target0", gfx::state::ColorMask::all(), gfx::preset::blend::ALPHA),
     }
 }
@@ -66,7 +68,6 @@ impl<R: gfx::Resources> Renderer<R> {
         for update in mem::replace(&mut drawlist.updates, vec![]) {
             match update {
                 Update::TextureSubresource{ id, offset, size, data } => {
-                    println!("subres");
                     let converted_data: Vec<[u8; 4]> = 
                         data.chunks(4).map(|c: &[u8]| [c[0], c[1], c[2], c[3]]).collect();
                     enc.update_texture::<gfx::format::R8_G8_B8_A8, gfx::format::Rgba8>(
@@ -87,7 +88,6 @@ impl<R: gfx::Resources> Renderer<R> {
                 },
 
                 Update::Texture{ id, size, data, .. } => {
-                    println!("tex");
                     let texture = fac.create_texture::<gfx::format::R8_G8_B8_A8>(
                         gfx::texture::Kind::D2(size[0] as _, size[1] as _, gfx::texture::AaMode::Single), 
                         1, 
@@ -130,7 +130,7 @@ impl<R: gfx::Resources> Renderer<R> {
         &mut self, 
         fac: &mut F,
         enc: &mut gfx::Encoder<R, C>, 
-        out: &gfx::handle::RenderTargetView<R, gfx::format::Rgba8>, 
+        out: &gfx::handle::RenderTargetView<R, ColorFormat>, 
         mut drawlist: DrawList) { 
 
         self.update(fac, enc, &mut drawlist);
@@ -147,7 +147,7 @@ impl<R: gfx::Resources> Renderer<R> {
 
         // convert to gfx vertices. a bit unfortunate, but hopefully this gets optimized out.
         let vertices = vertices.into_iter().map(|v| Vertex {
-            pos: [v.pos[0], 1.0 - v.pos[1]],
+            pos: [v.pos[0], -v.pos[1]],
             uv: v.uv,
             color: v.color,
             mode: v.mode,
@@ -181,7 +181,7 @@ impl<R: gfx::Resources> Renderer<R> {
                         enc.draw(&slice, &self.pipeline, &pipeline_gggui::Data {
                             vbuf, 
                             color: (self.textures[&0].1.clone(), self.sampler.clone()),
-                            //scissor: current_scissor,
+                            scissor: current_scissor,
                             out_color: out.clone(),
                         });
                     }
@@ -194,7 +194,7 @@ impl<R: gfx::Resources> Renderer<R> {
                         enc.draw(&slice, &self.pipeline, &pipeline_gggui::Data {
                             vbuf, 
                             color: (self.textures[&texture].1.clone(), self.sampler.clone()),
-                            //scissor: current_scissor,
+                            scissor: current_scissor,
                             out_color: out.clone(),
                         });
                     }
