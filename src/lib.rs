@@ -88,15 +88,15 @@ impl Ui {
         }
     }
 
-    pub fn get_patch<L: Loadable>(&mut self, load: L) -> Patch {
+    pub fn get_patch<'a, L: Loadable<'a>>(&mut self, load: L) -> Patch {
         self.cache.get_patch(load)
     }
 
-    pub fn get_image<L: Loadable>(&mut self, load: L) -> Image {
+    pub fn get_image<'a, L: Loadable<'a>>(&mut self, load: L) -> Image {
         self.cache.get_image(load)
     }
 
-    pub fn get_font<L: Loadable>(&mut self, load: L) -> Font {
+    pub fn get_font<L: Loadable<'static>>(&mut self, load: L) -> Font {
         self.cache.get_font(load)
     }
 

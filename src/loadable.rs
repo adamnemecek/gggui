@@ -4,17 +4,17 @@ use std::fs::*;
 use std::sync::Arc;
 use rusttype::SharedBytes;
 
-pub trait Loadable {
+pub trait Loadable<'a> {
     type Reader: BufRead+Seek;
     fn uid(&self) -> String;
     fn open(&self) -> Self::Reader;
-    fn bytes(&self) -> SharedBytes<'static>;
+    fn bytes(&self) -> SharedBytes<'a>;
 }
 
 //-----------------------------------------------------------//
 // PathBuf
 
-impl Loadable for PathBuf {
+impl Loadable<'static> for PathBuf {
     type Reader = BufReader<File>;
     fn uid(&self) -> String {
         self.to_string_lossy().to_string()
@@ -36,9 +36,9 @@ impl Loadable for PathBuf {
 // LoadFromStaticMemory
 
 #[derive(Clone)]
-pub struct LoadFromStaticMemory {
-    pub id: &'static str,
-    pub memory: &'static [u8],
+pub struct LoadFromStaticMemory<'a> {
+    pub id: &'a str,
+    pub memory: &'a [u8],
 }
 
 macro_rules! load_from_static_memory {
@@ -48,15 +48,15 @@ macro_rules! load_from_static_memory {
     })
 }
 
-impl Loadable for LoadFromStaticMemory {
-    type Reader = BufReader<Cursor<&'static[u8]>>;
+impl<'a> Loadable<'a> for LoadFromStaticMemory<'a> {
+    type Reader = BufReader<Cursor<&'a[u8]>>;
     fn uid(&self) -> String {
         self.id.to_string()
     }
     fn open(&self) -> Self::Reader {
         BufReader::new(Cursor::new(self.memory))
     }
-    fn bytes(&self) -> SharedBytes<'static> {
+    fn bytes(&self) -> SharedBytes<'a> {
         self.memory.into()
     }
 }

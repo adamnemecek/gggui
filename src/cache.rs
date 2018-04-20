@@ -72,7 +72,7 @@ impl Cache {
         mem::replace(&mut self.updates, Vec::new())
     }
 
-    pub fn get_patch<L: Loadable>(&mut self, load: L) -> Patch {
+    pub fn get_patch<'a, L: Loadable<'a>>(&mut self, load: L) -> Patch {
         let key = load.uid();
 
         if key.len() > 0 {
@@ -92,7 +92,7 @@ impl Cache {
         value
     }
 
-    pub fn get_image<L: Loadable>(&mut self, load: L) -> Image {
+    pub fn get_image<'a, L: Loadable<'a>>(&mut self, load: L) -> Image {
         let key = load.uid();
 
         if key.len() > 0 {
@@ -112,7 +112,7 @@ impl Cache {
         value
     }
 
-    pub fn get_font<L: Loadable>(&mut self, load: L) -> (Font, FontId) {
+    pub fn get_font<L: Loadable<'static>>(&mut self, load: L) -> (Font, FontId) {
         let key = load.uid();
 
         if key.len() > 0 {
@@ -239,7 +239,7 @@ impl Cache {
         }
     }
 
-    fn load_image<L: Loadable>(&mut self, load: &L) -> Image {
+    fn load_image<'a, L: Loadable<'a>>(&mut self, load: &L) -> Image {
         // load image data
         let image_data = image::load(load.open(), image::ImageFormat::PNG).unwrap().to_rgba();
 
@@ -258,7 +258,7 @@ impl Cache {
         }
     }
 
-    fn load_patch<L: Loadable>(&mut self, load: &L) -> Patch {
+    fn load_patch<'a, L: Loadable<'a>>(&mut self, load: &L) -> Patch {
         // load image data
         let mut image_data = image::load(load.open(), image::ImageFormat::PNG).unwrap().to_rgba();
 
@@ -337,7 +337,7 @@ impl Cache {
         }
     }
 
-    fn load_font<L: Loadable>(&mut self, load: &L) -> Font {
+    fn load_font<L: Loadable<'static>>(&mut self, load: &L) -> Font {
         let collection = rusttype::FontCollection::from_bytes(load.bytes());
         let font = collection.into_font().unwrap();
 
