@@ -67,9 +67,9 @@ pub struct UiContext<'a> {
     events: EventVec,
     capture: Capture,
     mouse_style: Option<MouseStyle>,
-    cursor: MousePosition,
+    pub cursor: MousePosition,
     visibility: Rect,
-    viewport: Rect,
+    pub viewport: Rect,
     enabled: bool,
 }
 
