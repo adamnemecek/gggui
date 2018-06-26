@@ -23,6 +23,8 @@ pub mod render;
 pub mod loadable;
 pub mod style;
 
+pub mod ecsui;
+
 mod cache;
 #[allow(dead_code)]
 mod qtree;

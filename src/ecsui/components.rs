@@ -1,3 +1,6 @@
+use primitive::*;
+use super::dag;
+
 #[derive(Clone,Copy,Debug)]
 pub enum Clickable {
     Idle,
@@ -31,7 +34,7 @@ impl Default for LayoutStyle {
 }
 
 pub struct Layout {
-    pub parent: WidgetId,
+    pub parent: dag::Id,
     pub style: LayoutStyle,
     pub grow_horizontal: bool,
     pub grow_vertical: bool,
@@ -45,4 +48,10 @@ pub struct Text {
     pub current: String,
     pub layout: Rect,
     pub valid: bool,
+}
+
+pub struct Background {
+    pub normal: Patch,
+    pub hover: Patch,
+    pub click: Patch,
 }
