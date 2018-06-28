@@ -1,3 +1,7 @@
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::cell::Ref;
+use std::cell::RefMut;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::ops::DerefMut;
@@ -9,29 +13,24 @@ use cache::Cache;
 use render::DrawList;
 use events::*;
 
+pub mod systems;
 pub mod components;
 pub mod widgets;
 
 pub type EventVec = SmallVec<[Event; 4]>;
 
+
+
+
+
 pub mod dag;
 //pub mod entry;
+use primitive::Primitive;
 
-pub trait WidgetBase {
-    fn tabstop(&self) -> bool { false }
-    fn enabled<'a>(&self, dag::Id, &Context<'a>) -> bool { true }
-    fn autofocus(&self, dag::Id) -> bool { false }
 
-    fn create<'a>(&mut self, dag::Id, &mut Context<'a>);
-    fn update<'a>(&mut self, dag::Id, &mut Context<'a>);
-    fn event<'a>(&mut self, dag::Id, &mut Context<'a>, Event, bool) -> Capture { Capture::None }
-}
-
-pub trait Widget: WidgetBase {
-    type Result;
-
-    fn result(&self, dag::Id) -> Self::Result;
-}
+use self::widgets::*;
+use self::components::*;
+use self::systems::*;
 
 pub struct Ui {
     iteration: usize,
@@ -39,6 +38,8 @@ pub struct Ui {
     tree: Option<dag::Tree>,
     free: dag::FreeList,
     containers: HashMap<TypeId, Box<Any>>,
+    systems_before_children: Vec<Box<SystemDispatch>>,
+    systems_after_children: Vec<Box<SystemDispatch>>,
     events: EventVec,
     cache: Cache,
     tabstop_last_id: Option<dag::Id>,
@@ -57,14 +58,39 @@ pub struct Context<'a> {
     tree: dag::Tree,
 }
 
-pub struct WidgetResult<'a, T: Widget> {
+pub struct WidgetResult<'a, T: 'static + Widget> {
     pub result: T::Result,
     pub context: Context<'a>,
 }
 
+
+
 impl Ui {
+    pub fn new() -> Self {
+
+        let systems_before_children = vec![];
+
+        let systems_after_children = vec![];
+
+        Self {
+            iteration: 1,
+            focus: None,
+            tree: Some(dag::Tree::new()),
+            free: dag::FreeList::new(),
+            containers: HashMap::new(),
+            systems_before_children,
+            systems_after_children,
+            events: EventVec::new(),
+            cache: Cache::new(2048),
+            tabstop_last_id: None,
+            tabstop_focus_id: None,
+        }
+    }
+
     pub fn begin<'a>(&'a mut self) -> Context<'a> {
-        let tree = self.tree.take().unwrap();
+        let mut tree = self.tree.take().unwrap();
+
+        tree.ord.clear();
 
         Context {
             parent: Parent::Ui(self),
@@ -75,7 +101,14 @@ impl Ui {
     }
 
     pub fn end(&mut self) -> (DrawList, MouseStyle, MouseMode) {
+        let mut tree = self.tree.take().unwrap();
+
+        tree.cleanup(self.iteration, &mut self.free);
         self.iteration += 1;
+
+        let primitives = self.run_systems(&mut tree);
+
+        self.tree = Some(tree);
 
         unimplemented!();
     }
@@ -83,25 +116,51 @@ impl Ui {
     pub fn create_component<T: 'static + Clone>(&mut self, (id, gen): dag::Id, value: T) {
         let container: &mut _ = self.containers
             .entry(TypeId::of::<T>())
-            .or_insert_with(|| Box::new(Vec::<(Option<T>, usize)>::new()))
-            .downcast_mut::<Vec<(Option<T>, usize)>>()
+            .or_insert_with(|| Box::new(Container::<T>::new(RefCell::new(Vec::<(Option<T>, usize)>::new()))))
+            .downcast_mut::<Container<T>>()
             .unwrap();
 
-        container.resize(self.free.len(), (None, 0));
-        container[id] = (Some(value), gen);
+        container.borrow_mut().resize(self.free.len(), (None, 0));
+        container.borrow_mut()[id] = (Some(value), gen);
     }
 
-    pub fn component<T: 'static + Clone>(&mut self, (id, gen): dag::Id) -> Option<&mut T> {
+    pub fn component<T: 'static + Clone>(&self, (id, gen): dag::Id) -> Option<FetchComponent<T>> {
         self.containers
-            .get_mut(&TypeId::of::<T>())
-            .and_then(|x| x.downcast_mut::<Vec<(Option<T>, usize)>>())
+            .get(&TypeId::of::<T>())
+            .and_then(|x| x.downcast_ref::<Container<T>>())
             .and_then(|container| {
-                if id < container.len() && container[id].1 == gen {
-                    container[id].0.as_mut()
+                if id < container.borrow().len() && container.borrow()[id].1 == gen {
+                    Some(FetchComponent::new(container.clone(), id))
                 } else {
                     None
                 }
             })        
+    }
+
+    fn run_systems(&mut self, tree: &mut dag::Tree) -> Vec<Primitive> {
+        let mut system_context = SystemContext{
+            drawlist: vec![],
+        };
+
+        for id in tree.ord.iter() {
+            for sys in self.systems_before_children.iter() {
+                sys.run_for(&mut system_context, *id, self).ok();
+            }
+
+            for val in tree.ids.values_mut() {
+                if val.id == *id {
+                    val.subs.as_mut().map(|x| {
+                        system_context.drawlist.append(&mut self.run_systems(x));
+                    });
+                }
+            }
+
+            for sys in self.systems_after_children.iter() {
+                sys.run_for(&mut system_context, *id, self).ok();
+            }
+        }
+
+        system_context.drawlist
     }
 }
 
@@ -110,13 +169,14 @@ impl<'a> Context<'a> {
     // The specified id should be unique within this context, it is used to find it's state in
     //  future iterations.
     // If the widget has children, you must add them through the context in the returned WidgetResult
-    pub fn add<'b: 'a, T: 'static + Widget>(&'b mut self, id: &'b str, mut w: T) -> WidgetResult<'b, T> {
-        let (internal_id, create, tree) = {
+    pub fn add<T: 'static + Widget>(&'a mut self, id: &'a str, mut w: T) -> WidgetResult<'a, T> {
+        let (internal_id, create, mut tree) = {
             let iteration = self.parent.iteration;
             let tree = &mut self.tree;
             let free = &mut self.parent.free;
             let internal_id = tree.id(id, free);
 
+            tree.ord.push(internal_id);
             let item = tree.item(id, free);
 
             (internal_id, 0 == replace(&mut item.used, iteration), item.subs.take().unwrap_or(dag::Tree::new()))
@@ -132,6 +192,8 @@ impl<'a> Context<'a> {
         let capture = self.capture;
 
         self.widgets.push((internal_id, Box::new(w)));
+
+        tree.ord.clear();
 
         WidgetResult {
             result,

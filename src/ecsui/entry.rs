@@ -1,30 +1,33 @@
 use super::*;
 
-pub trait EntryBase<'c> {
-    fn eval(self, &mut Context<'c>);
+pub trait Entry<'c> {
+    fn eval(self, &'c mut Context<'c>);
 }
 
-pub enum Entry<'a, 'c, T: 'static + Widget> {
-    Leaf(&'a str, T),
-    Handler(&'a str, T, Box<FnOnce(T::Result)>),
-    Node(&'a str, T, Vec<Box<EntryBase<'c>>>),
+impl<'c, T: 'static + Widget> Entry<'c> for (&'static str, T) {
+    fn eval(self, context: &'c mut Context<'c>) {
+        context.add(self.0, self.1);
+    }
 }
 
-impl<'a, 'c, T: 'static + Widget> EntryBase<'c> for Entry<'a, 'c, T> {
-    fn eval(self, context: &mut Context<'c>) {
-        match self {
-            Entry::Leaf(id, x) => {
-                context.add(id, x);
-            },
-            Entry::Handler(id, x, l) => {
-                l(context.add(id, x).result);
-            },
-            Entry::Node(id, x, y) => {
-                let sub = &mut context.add(id, x).context;
-                for i in y {
-                    i.eval(&mut sub);
-                }
-            },
-        }
+impl<'c, T: 'static + Widget, F: FnOnce(T::Result)> Entry<'c> for (&'static str, T, F) {
+    fn eval(self, context: &'c mut Context<'c>) {
+        self.2(context.add(self.0, self.1).result);
+    }
+}
+
+fn dispatch<'c>(_context: &'c mut Context<'c>, _entries: Vec<Box<Entry<'c>>>) {
+    _entries[0].eval(_context);
+    _entries[1].eval(_context);
+    _entries[2].eval(_context);
+    //for x in entries {
+    //    x.eval(context);
+    //}
+}
+
+impl<'c: 'd, 'd, T: 'static + Widget> Entry<'c> for (&'static str, T, Vec<Box<Entry<'d>>>) {
+    fn eval(self, context: &'c mut Context<'c>) {
+        let mut result = context.add(self.0, self.1);
+        dispatch(&mut result.context, self.2);
     }
 }

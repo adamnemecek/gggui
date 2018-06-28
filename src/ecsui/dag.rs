@@ -9,7 +9,8 @@ pub struct Item {
 }
 
 pub struct Tree {
-    pub ids: HashMap<String, Item>
+    pub ids: HashMap<String, Item>,
+    pub ord: Vec<Id>,
 }
 
 pub struct FreeList {
@@ -44,7 +45,8 @@ impl FreeList {
 impl Tree {
     pub fn new() -> Self {
         Tree {
-            ids: HashMap::new()
+            ids: HashMap::new(),
+            ord: Vec::new(),
         }
     }
 
