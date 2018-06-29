@@ -38,7 +38,7 @@ impl FreeList {
     }
 
     pub fn len(&self) -> usize {
-        self.next as usize
+        self.next as usize + 1
     }
 }
 

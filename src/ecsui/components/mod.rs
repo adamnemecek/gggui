@@ -1,14 +1,38 @@
 use super::*;
 use primitive::*;
 
+pub mod layout;
+pub mod background;
+pub mod clickable;
+
+pub use self::layout::Layout;
+pub use self::background::Background;
+pub use self::clickable::Clickable;
+
 pub type Container<T> = Rc<RefCell<Vec<(Option<T>, usize)>>>;
 
-pub struct FetchComponent<T> {
+pub trait Fetch: Sized {
+    fn fetch(world: &Ui, id: dag::Id) -> Result<Self, ()>;
+}
+
+pub struct FetchComponent<T: 'static + Clone> {
     x: Container<T>,
     i: usize,
 }
 
-impl<T> FetchComponent<T> {
+impl<T: 'static + Clone> Fetch for FetchComponent<T> {
+    fn fetch(world: &Ui, id: dag::Id) -> Result<Self, ()> {
+        world.component(id).ok_or(())
+    }
+}
+
+impl<T: 'static + Clone> Fetch for Option<FetchComponent<T>> {
+    fn fetch(world: &Ui, id: dag::Id) -> Result<Self, ()> {
+        Ok(world.component(id))
+    }
+}
+
+impl<T: 'static + Clone> FetchComponent<T> {
     pub fn new(x: Container<T>, i: usize) -> Self {
         Self {
             x, i
@@ -46,7 +70,7 @@ impl<'a, T: 'a> DerefMut for ComponentRefMut<'a, T> {
     }
 }
 
-impl<T> FetchComponent<T> {
+impl<T: 'static + Clone> FetchComponent<T> {
     pub fn borrow<'a>(&'a self) -> ComponentRef<'a, T> {
         ComponentRef {
             x: self.x.borrow(),
@@ -60,63 +84,4 @@ impl<T> FetchComponent<T> {
             i: self.i,
         }
     }
-}
-
-
-
-
-
-
-#[derive(Clone,Copy,Debug)]
-pub enum Clickable {
-    Idle,
-    Hovering,
-    Clicked(bool),
-    Released(bool),
-}
-
-#[derive(Clone,Copy,Debug)]
-pub enum Align {
-    Begin, Middle, End
-}
-
-#[derive(Clone,Copy,Debug)]
-pub enum LayoutStyle {
-    Wrap,
-    LinearRight(Align),
-    LinearLeft(Align),
-    LinearDown(Align),
-    LinearUp(Align),
-    GridHorizontal(u32),
-    GridVertical(u32),
-    Single(Align, Align),
-    Absolute(Rect),
-}
-
-impl Default for LayoutStyle {
-    fn default() -> Self {
-        LayoutStyle::Wrap
-    }
-}
-
-#[derive(Clone,Debug)]
-pub struct Layout {
-    pub current: Rect,
-    pub valid: bool,
-    pub margin: Rect,
-    pub padding: Rect,
-}
-
-#[derive(Clone,Debug)]
-pub struct Text {
-    pub current: String,
-    pub layout: Rect,
-    pub valid: bool,
-}
-
-#[derive(Clone,Debug)]
-pub struct Background {
-    pub normal: Patch,
-    pub hover: Patch,
-    pub click: Patch,
 }
