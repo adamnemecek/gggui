@@ -5,7 +5,7 @@ pub mod layout;
 pub mod background;
 pub mod clickable;
 
-pub use self::layout::Layout;
+pub use self::layout::*;
 pub use self::background::Background;
 pub use self::clickable::Clickable;
 

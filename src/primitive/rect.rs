@@ -128,6 +128,24 @@ impl Rect {
     pub fn height(&self) -> f32 {
         self.bottom-self.top
     }
+
+    pub fn after_margin(self, margin: Rect) -> Rect {
+        Rect {
+            left: self.left - margin.left,
+            top: self.top - margin.top,
+            right: self.right + margin.top,
+            bottom: self.bottom + margin.bottom,
+        }
+    }
+
+    pub fn after_padding(self, padding: Rect) -> Rect {
+        Rect {
+            left: self.left + padding.left,
+            top: self.top + padding.top,
+            right: self.right - padding.top,
+            bottom: self.bottom - padding.bottom,
+        }
+    }
 }
 
 impl Into<Rect> for [f32;4] {

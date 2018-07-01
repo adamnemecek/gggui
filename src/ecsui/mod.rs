@@ -96,6 +96,7 @@ pub struct Context<'a> {
     parent: &'a mut Ui,
     source: Option<String>,
     widgets: Vec<(dag::Id, Box<WidgetBase>)>,
+    window: Rect,
 }
 
 pub struct WidgetResult<'a, T: 'static + Widget> {
@@ -179,6 +180,7 @@ impl Ui {
             parent: self,
             source: None,
             widgets: vec![],
+            window: viewport,
         }
     }
 
@@ -278,7 +280,7 @@ impl<'a> Context<'a> {
 
         self.parent.tree_stack.push(tree);
 
-        w.update(internal_id, self.parent);
+        let sub_window = w.update(internal_id, self.parent, self.window);
 
         let result = w.result(internal_id);
 
@@ -290,6 +292,7 @@ impl<'a> Context<'a> {
                 parent: self.parent,
                 source: Some(id.to_string()),
                 widgets: vec![],
+                window: sub_window,
             }
         }
     }
@@ -312,7 +315,7 @@ impl<'a> Drop for Context<'a> {
                         cursor: MousePosition { 
                             x: self.parent.cursor.0, 
                             y: self.parent.cursor.1, 
-                            visibility: Some(self.parent.viewport) },
+                            visibility: Some(self.window) },
                         focused,
                     };
 

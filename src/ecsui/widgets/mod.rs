@@ -12,7 +12,7 @@ pub trait WidgetBase {
     fn autofocus(&self, dag::Id) -> bool { false }
 
     fn create(&mut self, id: dag::Id, world: &mut Ui);
-    fn update(&mut self, id: dag::Id, world: &Ui);
+    fn update(&mut self, id: dag::Id, world: &Ui, window: Rect) -> Rect;
     fn event(&mut self, id: dag::Id, world: &Ui, ev: Event, focus: bool) -> Capture;
 }
 

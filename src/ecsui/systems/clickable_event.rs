@@ -13,6 +13,12 @@ impl System<EventSystemContext> for ClickableEventSystem {
         let state = state.deref_mut();
         let rect = layout.borrow().current;
 
+        if rect.is_none() {
+            return;
+        }
+
+        let rect = rect.unwrap();
+
         *state = match state {
             Clickable::Idle => {
                 if context.focused {

@@ -18,10 +18,9 @@ impl WidgetBase for Button {
         let layout = Layout{
             margin: Rect{ left: 5.0, top: 5.0, right: 5.0, bottom: 5.0 },
             padding: Rect{ left: 5.0, top: 5.0, right: 5.0, bottom: 5.0 },
-            current: Rect::from_wh(256.0, 64.0),
-            valid: true,
-            growable_x: true,
-            growable_y: false,
+            current: Some(Rect::from_wh(256.0, 64.0)),
+            constrain_width: Constraint::FillToParent,
+            constrain_height: Constraint::Fixed,
         };
         let background = Background{
             normal: world.get_patch(load_from_static_memory!("../../../img/button_normal.png")),
@@ -35,7 +34,7 @@ impl WidgetBase for Button {
         world.create_component(id, clickable);
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui) {
+    fn update(&mut self, id: dag::Id, world: &Ui, _window: Rect) -> Rect {
         let mut clickable = world.component::<Clickable>(id);
         let clickable = clickable.as_mut().unwrap();
         let mut clickable = clickable.borrow_mut();
@@ -47,6 +46,8 @@ impl WidgetBase for Button {
             },
             x => x,
         };
+
+        Rect::from_wh(0.0, 0.0)
     }
 
     fn event(&mut self, _id: dag::Id, _world: &Ui, _ev: Event, _focus: bool) -> Capture {

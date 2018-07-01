@@ -10,67 +10,57 @@ pub enum Flow {
 }
 
 pub struct LinearLayout {
-    size: (f32, f32),
-    padding: Rect,
-    margin: Rect,
+    layout: Layout,
     flow: Flow,
 }
 
 impl LinearLayout {
-    pub fn new(width: f32, height: f32, flow: Flow) -> Self {
+    pub fn new(layout: Layout, flow: Flow) -> Self {
         Self {
-            size: (width, height),
+            layout,
             flow,
-            padding: Rect::from_wh(0.0, 0.0),
-            margin: Rect::from_wh(0.0, 0.0),
         }
-    }
-
-    pub fn padding(mut self, padding: Rect) -> Self {
-    	self.padding = padding;
-    	self
-    }
-
-    pub fn margin(mut self, margin: Rect) -> Self {
-    	self.margin = margin;
-    	self
     }
 }
 
 impl WidgetBase for LinearLayout {
-    fn create(&mut self, id: dag::Id, world: &mut Ui) {
-        let layout = Layout{
-            margin: self.margin,
-            padding: self.padding,
-            current: Rect::from_wh(self.size.0, self.size.1),
-            valid: true,
-            growable_x: false,
-            growable_y: false,
-        };
-        
-        world.create_component(id, layout);
+    fn create(&mut self, id: dag::Id, world: &mut Ui) {        
+        world.create_component(id, self.layout.clone());
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui) {
+    fn update(&mut self, id: dag::Id, world: &Ui, window: Rect) -> Rect {
 
     	let mut layout: FetchComponent<Layout> = world.component(id).unwrap();
 
     	let (mut cursor, mut limit) = {
-    		let layout = layout.borrow().clone();
-    		let rect = layout.current;
-    		let pad = layout.padding;
+    		let layout = layout.borrow();
+            if layout.current.is_none() {
+                return;
+            }
+
+            let rect = layout.after_padding();
+            let w = if let &Constraint::Fixed = &layout.constrain_width { &window } else { &rect };
+            let h = if let &Constraint::Fixed = &layout.constrain_height { &window } else { &rect };
     		match self.flow {
-	    		Flow::LeftToRight => ((rect.left+pad.left, rect.top+pad.top), (rect.right-pad.right, rect.bottom-pad.bottom)),
-	    		Flow::TopToBottom => ((rect.left+pad.left, rect.top+pad.top), (rect.right-pad.right, rect.bottom-pad.bottom)),
-	    		Flow::RightToLeft => ((rect.right-pad.right, rect.top+pad.top), (rect.left+pad.left, rect.bottom-pad.bottom)),
-	    		Flow::BottomToTop => ((rect.left+pad.left, rect.bottom-pad.bottom), (rect.right-pad.right, rect.top+pad.top)),
+	    		Flow::LeftToRight => ((rect.left, rect.top), (w.right, h.bottom)),
+	    		Flow::TopToBottom => ((rect.left, rect.top), (w.right, h.bottom)),
+	    		Flow::RightToLeft => ((rect.right, rect.top), (w.left, h.bottom)),
+	    		Flow::BottomToTop => ((rect.left, rect.bottom), (w.right, h.top)),
     		}
     	};
 
     	for child in world.children() {
     		world.component(*child).map(|mut layout: FetchComponent<Layout>| {
     			let mut layout = layout.borrow_mut();
-    			let (w, h) = (layout.current.width(), layout.current.height());
+
+    			let w = layout.current.map(|c| c.width());
+                let h = layout.current.map(|c| c.height());
+
+                let (w, window_w) = match &layout.constrain_width {
+                    Constraint::Fixed => (w.unwrap(), w.unwrap()),
+                    Constraint::Grow => (w.unwrap_or(0.0), window.width()),
+                    Constraint::Fill => (window.width(), window.width()),
+                }
 
     			//----------------------------------------------------------------------------//
     			// update child layout

@@ -1,11 +1,27 @@
 use super::*;
 
-#[derive(Clone,Debug)]
+#[derive(Clone)]
+pub enum Constraint {
+	Fixed,
+	Grow,
+	Fill,
+}
+
+#[derive(Clone)]
 pub struct Layout {
-    pub current: Rect,
-    pub valid: bool,
+    pub current: Option<Rect>,
     pub margin: Rect,
     pub padding: Rect,
-    pub growable_x: bool,
-    pub growable_y: bool,
+    pub constrain_width: Constraint,
+    pub constrain_height: Constraint,
+}
+
+impl Layout {
+	pub fn after_margin(&self) -> Rect {
+		self.current.clone().unwrap().after_margin(self.margin)
+	}
+
+	pub fn after_padding(&self) -> Rect {
+		self.current.clone().unwrap().after_padding(self.padding)
+	}
 }

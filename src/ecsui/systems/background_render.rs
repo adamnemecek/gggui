@@ -12,21 +12,23 @@ impl System<Vec<Primitive>> for BackgroundRenderSystem {
         Option<FetchComponent<Clickable>>
     );
     fn run(&self, drawlist: &mut Vec<Primitive>, (layout, background, state): Self::Components) {
-        let patch = state.map(|state| match state.borrow().deref() {
-            &Clickable::Hovering =>
-                background.borrow().hover.clone(),
+        if layout.borrow().current.is_some() {
+            let patch = state.map(|state| match state.borrow().deref() {
+                &Clickable::Hovering =>
+                    background.borrow().hover.clone(),
 
-            &Clickable::Clicked(true) | &Clickable::Released(true) =>
-                background.borrow().click.clone(),
+                &Clickable::Clicked(true) | &Clickable::Released(true) =>
+                    background.borrow().click.clone(),
 
-            &_ =>
-                background.borrow().normal.clone(),
-        }).unwrap_or(background.borrow().normal.clone());
+                &_ =>
+                    background.borrow().normal.clone(),
+            }).unwrap_or(background.borrow().normal.clone());
 
-        let rect = layout.borrow().current;
+            let rect = layout.borrow().current.unwrap();
 
-        let color = Color{ r:1.0, g:1.0, b:1.0, a:1.0 };
-        
-        drawlist.push(Primitive::Draw9(patch, rect, color));
+            let color = Color{ r:1.0, g:1.0, b:1.0, a:1.0 };
+            
+            drawlist.push(Primitive::Draw9(patch, rect, color));
+        }
     }
 }
