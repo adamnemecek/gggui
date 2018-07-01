@@ -197,6 +197,11 @@ impl Ui {
         (drawlist, self.mouse_style, self.mouse_mode)
     }
 
+    pub fn children(&self) -> impl Iterator<Item=&dag::Id> {
+        let top = self.tree_stack.len() - 1;
+        self.tree_stack[top].ord.iter()
+    }
+
     pub fn create_component<T: 'static + Clone>(&mut self, (id, gen): dag::Id, value: T) {
         let container: &mut _ = self.containers
             .entry(TypeId::of::<T>())
@@ -269,15 +274,15 @@ impl<'a> Context<'a> {
             w.create(internal_id, self.parent);
         }
 
+        tree.ord.clear();
+
+        self.parent.tree_stack.push(tree);
+
         w.update(internal_id, self.parent);
 
         let result = w.result(internal_id);
 
-        self.widgets.push((internal_id, Box::new(w)));
-
-        tree.ord.clear();
-
-        self.parent.tree_stack.push(tree);
+        self.widgets.push((internal_id, Box::new(w)));        
 
         WidgetResult {
             result,

@@ -6,4 +6,6 @@ pub struct Layout {
     pub valid: bool,
     pub margin: Rect,
     pub padding: Rect,
+    pub growable_x: bool,
+    pub growable_y: bool,
 }

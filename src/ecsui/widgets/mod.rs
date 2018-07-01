@@ -1,8 +1,10 @@
 use super::*;
 
 pub mod button;
+pub mod linear;
 
 pub use self::button::Button;
+pub use self::linear::LinearLayout;
 
 pub trait WidgetBase {
     fn tabstop(&self) -> bool { false }

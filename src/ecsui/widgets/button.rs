@@ -20,6 +20,8 @@ impl WidgetBase for Button {
             padding: Rect{ left: 5.0, top: 5.0, right: 5.0, bottom: 5.0 },
             current: Rect::from_wh(256.0, 64.0),
             valid: true,
+            growable_x: true,
+            growable_y: false,
         };
         let background = Background{
             normal: world.get_patch(load_from_static_memory!("../../../img/button_normal.png")),
