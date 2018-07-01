@@ -1,4 +1,3 @@
-use ecsui::components::background::Background;
 use super::*;
 
 #[derive(Clone,Copy)]
@@ -32,10 +31,19 @@ impl WidgetBase for LinearLayout {
 
     	let mut layout: FetchComponent<Layout> = world.component(id).unwrap();
 
-    	let (mut cursor, mut limit) = {
+    	let window = window.after_padding(layout.borrow().padding);
+
+    	let (r_to_l, b_to_t) = match self.flow {
+    		Flow::LeftToRight => (false, false),
+    		Flow::TopToBottom => (false, false),
+    		Flow::RightToLeft => (true, false),
+    		Flow::BottomToTop => (false, true),
+    	};
+
+    	let (mut cursor, limit) = {
     		let layout = layout.borrow();
             if layout.current.is_none() {
-                return;
+                return window;
             }
 
             let rect = layout.after_padding();
@@ -49,150 +57,105 @@ impl WidgetBase for LinearLayout {
     		}
     	};
 
+    	let mut extents = cursor.clone();
+
     	for child in world.children() {
     		world.component(*child).map(|mut layout: FetchComponent<Layout>| {
     			let mut layout = layout.borrow_mut();
+    			let w = layout.current.map(|c| c.width() + layout.margin.left + layout.margin.right);
+                let h = layout.current.map(|c| c.height() + layout.margin.top + layout.margin.bottom);
+                let w = match &layout.constrain_width {
+                    Constraint::Fixed => w.unwrap(),
+                    Constraint::Grow => w.unwrap_or(0.0),
+                    Constraint::Fill => (cursor.0 - limit.0).abs(),
+                };
+                let h = match &layout.constrain_height {
+                	Constraint::Fixed => h.unwrap(),
+                	Constraint::Grow => h.unwrap_or(0.0),
+                	Constraint::Fill => (cursor.1 - limit.1).abs(),
+                };
+    			
+    			// update layout rect
+    			layout.current = Some(Rect {
+    				left:   if r_to_l {cursor.0-w+layout.margin.left} else {cursor.0+layout.margin.left},
+    				right:  if r_to_l {cursor.0-layout.margin.right}  else {cursor.0+w-layout.margin.right},
+    				top:    if b_to_t {cursor.1-h+layout.margin.top}  else {cursor.1+layout.margin.top},
+    				bottom: if b_to_t {cursor.1-layout.margin.bottom} else {cursor.1+h-layout.margin.bottom},
+    			});
 
-    			let w = layout.current.map(|c| c.width());
-                let h = layout.current.map(|c| c.height());
-
-                let (w, window_w) = match &layout.constrain_width {
-                    Constraint::Fixed => (w.unwrap(), w.unwrap()),
-                    Constraint::Grow => (w.unwrap_or(0.0), window.width()),
-                    Constraint::Fill => (window.width(), window.width()),
-                }
-
-    			//----------------------------------------------------------------------------//
-    			// update child layout
-    			layout.current = match self.flow {
-    				Flow::LeftToRight => {
-    					Rect {
-		    				left: cursor.0 + layout.margin.left,
-		    				top: cursor.1 + layout.margin.top,
-		    				right: cursor.0 + layout.margin.left + w,
-		    				bottom: if layout.growable_y { 
-		    					limit.1 - layout.margin.bottom 
-		    				} else { 
-		    					cursor.1 + layout.margin.top + h 
-		    				},
-		    			}
-    				},
-    				Flow::TopToBottom => {
-    					Rect {
-		    				left: cursor.0 + layout.margin.left,
-		    				top: cursor.1 + layout.margin.top,
-		    				right: if layout.growable_x {
-		    					limit.0 - layout.margin.right
-		    				} else {
-		    					cursor.0 + layout.margin.left + w
-		    				},
-		    				bottom: cursor.1 + layout.margin.top + h,
-		    			}
-    				},
-    				Flow::RightToLeft => {
-    					Rect {
-		    				left: cursor.0 - layout.margin.right - w,
-		    				top: cursor.1 + layout.margin.top,
-		    				right: cursor.0 - layout.margin.right,
-		    				bottom: if layout.growable_y {
-		    					limit.1 - layout.margin.bottom
-		    				} else {
-		    					cursor.1 + layout.margin.top + h
-		    				},
-		    			}
-    				},
-    				Flow::BottomToTop => {
-    					Rect {
-		    				left: cursor.0 + layout.margin.left,
-		    				top: cursor.1 - layout.margin.bottom - h,
-		    				right: if layout.growable_x {
-		    					limit.0 - layout.margin.right
-		    				} else {
-		    					cursor.0 + layout.margin.left + w
-		    				},
-		    				bottom: cursor.1 - layout.margin.bottom,
-		    			}
-    				},
+    			// advance cursor
+    			match self.flow {
+    				Flow::LeftToRight => cursor.0 += w,
+					Flow::TopToBottom => cursor.1 += h,
+					Flow::RightToLeft => cursor.0 -= w,
+					Flow::BottomToTop => cursor.1 -= h,
     			};
 
-    			//----------------------------------------------------------------------------//
-    			// constrain to limits
-    			if false /*growable*/ {
-    				limit.0 = match self.flow {
-    					Flow::RightToLeft => limit.0.min(layout.current.left - layout.margin.left),
-    					_ => limit.0.max(layout.current.right + layout.margin.right),
-    				};
-    				limit.1 = match self.flow {
-    					Flow::BottomToTop => limit.1.min(layout.current.top - layout.margin.top),
-    					_ => limit.1.max(layout.current.bottom + layout.margin.bottom),
-    				};
+    			// apply constraints
+    			if r_to_l {
+    				if cursor.0 < limit.0 {
+    					let delta = limit.0 - cursor.0;
+    					cursor.0 = limit.0;
+
+    					layout.current.as_mut().unwrap().left += delta;
+    				}
     			} else {
-    				match self.flow {
-    					Flow::LeftToRight => {
-    						layout.current.right = layout.current.right.min(limit.0 - layout.margin.right);
-    						layout.current.bottom = layout.current.bottom.min(limit.1 - layout.margin.bottom);
-    					},
-    					Flow::TopToBottom => {
-    						layout.current.right = layout.current.right.min(limit.0 - layout.margin.right);
-    						layout.current.bottom = layout.current.bottom.min(limit.1 - layout.margin.bottom);
-    					},
-    					Flow::RightToLeft => {
-    						layout.current.left = layout.current.left.max(limit.0 + layout.margin.left);
-    						layout.current.bottom = layout.current.bottom.min(limit.1 - layout.margin.bottom);
-    					},
-    					Flow::BottomToTop => {
-    						layout.current.right = layout.current.right.min(limit.0 - layout.margin.right);
-    						layout.current.top = layout.current.top.max(limit.1 + layout.margin.top);
-    					},
+    				if cursor.0 > limit.0 {
+    					let delta = cursor.0 - limit.0;
+    					cursor.0 = limit.0;
+
+    					layout.current.as_mut().unwrap().right -= delta;
+    				}
+    			}
+    			if b_to_t {
+    				if cursor.1 < limit.1 {
+    					let delta = limit.1 - cursor.1;
+    					cursor.1 = limit.1;
+
+    					layout.current.as_mut().unwrap().top += delta;
+    				}
+    			} else {
+    				if cursor.1 > limit.1 {
+    					let delta = cursor.1 - limit.1;
+    					cursor.1 = limit.1;
+
+    					layout.current.as_mut().unwrap().bottom -= delta;
     				}
     			}
 
-    			//----------------------------------------------------------------------------//
-    			// validate
-    			layout.valid = 
-    				layout.current.right > layout.current.left && 
-    				layout.current.bottom > layout.current.top;
-    			
-    			//----------------------------------------------------------------------------//
-    			// update cursor
-    			cursor = match self.flow {
-    				Flow::LeftToRight => {
-    					(cursor.0 + layout.margin.left + layout.margin.right + w, cursor.1)
-    				},
-    				Flow::TopToBottom => {
-    					(cursor.0, cursor.1 + layout.margin.top + layout.margin.bottom + h)
-    				},
-    				Flow::RightToLeft => {
-    					(cursor.0 - layout.margin.left + layout.margin.right + w, cursor.1)
-    				},
-    				Flow::BottomToTop => {
-    					(cursor.0, cursor.1 - layout.margin.top + layout.margin.bottom + h)
-    				},
-    			};
+    			// validate rect
+    			if !layout.current.map(|rect| rect.left < rect.right && rect.top < rect.bottom).unwrap_or(false) {
+    				layout.current.take();
+    			} else {
+    				extents.0 = if r_to_l { 
+    					extents.0.min(layout.current.as_ref().unwrap().left - layout.margin.left) 
+    				} else {
+    					extents.0.max(layout.current.as_ref().unwrap().right + layout.margin.right)
+    				};
+    				extents.1 = if b_to_t {
+    					extents.1.min(layout.current.as_ref().unwrap().top - layout.margin.top)
+    				} else {
+    					extents.1.max(layout.current.as_ref().unwrap().bottom + layout.margin.bottom)
+    				};
+    			}
     		});
     	}
 
-    	if self.growable {
-    		let mut layout = layout.borrow_mut();
-    		match self.flow {
-    			Flow::LeftToRight |
-    			Flow::TopToBottom => {
-    				layout.current.right = limit.0 + layout.padding.right;
-    				layout.current.bottom = limit.1 + layout.padding.bottom;
-    			},
-	    		Flow::RightToLeft => {
-    				layout.current.left = limit.0 - layout.padding.left;
-    				layout.current.bottom = limit.1 + layout.padding.bottom;
-    			},
-	    		Flow::BottomToTop => {
-    				layout.current.right = limit.0 - layout.padding.left;
-    				layout.current.bottom = limit.1 + layout.padding.bottom;
-    			},
-    		};
-    		layout.valid = 
-				layout.current.right > layout.current.left && 
-				layout.current.bottom > layout.current.top;
-    	}
+    	// update own layout
+    	let mut layout = layout.borrow_mut();
+    	let old = layout.current.unwrap();
+    	layout.current.as_mut().unwrap().right = match layout.constrain_width.clone() {
+    		Constraint::Fixed => old.right,
+    		Constraint::Grow => extents.0 + layout.padding.right,
+    		Constraint::Fill => window.right + layout.padding.right,
+    	};
+    	layout.current.as_mut().unwrap().bottom = match layout.constrain_height.clone() {
+    		Constraint::Fixed => old.bottom,
+    		Constraint::Grow => extents.1 + layout.padding.bottom,
+    		Constraint::Fill => window.bottom + layout.padding.bottom,
+    	};
+
+    	layout.after_padding()
     }
 
     fn event(&mut self, _id: dag::Id, _world: &Ui, _ev: Event, _focus: bool) -> Capture {
