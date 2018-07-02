@@ -57,13 +57,8 @@ impl WidgetBase for Button {
 
         Viewport {
             child_rect: Rect::from_wh(0.0, 0.0),
-            input_rect: Rect::from_wh(0.0, 0.0),
+            input_rect: None,
         }
-    }
-
-    fn event(&mut self, _id: dag::Id, _world: &Ui, _ev: Event, _focus: bool) -> Capture {
-        // todo
-        Capture::None
     }
 }
 

@@ -11,8 +11,8 @@ pub struct ScrollState {
 pub enum MouseState {
     Idle,
     HoverContent,
-    HoverH(f32),
-    HoverV(f32),
+    HoverH,
+    HoverV,
     ScrollH(f32),
     ScrollV(f32),
 }
@@ -20,13 +20,15 @@ pub enum MouseState {
 pub struct Scroll {
     width: f32,
     height: f32,
+    content: Rect,
 }
 
 impl Scroll {
     pub fn new(width: f32, height: f32) -> Self {
         Self {
             width,
-            height
+            height,
+            content: Rect::from_wh(0.0, 0.0),
         }
     }
 }
@@ -47,97 +49,97 @@ impl WidgetBase for Scroll {
         
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, _window: Viewport) -> Viewport {
-        let state: ScrollState = world.component(id).unwrap().borrow().clone();
+    fn update(&mut self, id: dag::Id, world: &Ui, window: Viewport) -> Viewport {
+        let state = world.component::<ScrollState>(id).unwrap();
+        let state = state.borrow().clone();
+        let mut viewport = Viewport {
+            child_rect: Rect::from_wh(0.0, 0.0),
+            input_rect: None,
+        };
+
         for child in world.children() {
             world.component(*child).map(|mut layout: FetchComponent<Layout>| {
-                layout.current = layout.current.map(|rect| Rect {
-                    left: -state.scroll.0,
-                    top: -state.scroll.1,
-                    right: rect.width() - state.scroll.0,
-                    bottom: rect.height() - state.scroll.1,
+                let mut layout = layout.borrow_mut();
+                layout.current = layout.current.map(|rect| {
+                    let rect = Rect {
+                        left: -state.scroll.0,
+                        top: -state.scroll.1,
+                        right: rect.width() - state.scroll.0,
+                        bottom: rect.height() - state.scroll.1,
+                    };
+
+                    viewport.child_rect = rect;
+                    viewport.input_rect = window.input_rect.and_then(|ir| ir.intersect(&rect));
+                    rect
                 }).or(Some(Rect{
                     left: -state.scroll.0,
                     top: -state.scroll.1,
                     right: -state.scroll.0,
                     bottom: -state.scroll.1,
                 }));
-            }
+            });
         }
 
-        Viewport {
-            child_rect: Rect::from_wh(0.0, 0.0),
-            input_rect: Rect::from_wh(0.0, 0.0),
-        }
+        viewport
     }
 
-    fn event(&mut self, id: dag::Id, world: &Ui, event: Event, focus: bool) -> Capture {
-        let mut capture = Capture::None;
+    fn event(&mut self, id: dag::Id, world: &Ui, context: &mut EventSystemContext) {
         let mut state: FetchComponent<ScrollState> = world.component(id).unwrap();
         let mut state = state.borrow_mut();
 
+        let content_rect = Rect::from_wh(0.0, 0.0);
+        let horizontal_rect = Rect::from_wh(0.0, 0.0);
+        let vertical_rect = Rect::from_wh(0.0, 0.0);
+
         state.inner = match state.inner {
-            MouseState::Idle => {
-                MouseState::Idle
-            },
-            MouseState::HoverContent => {
-                MouseState::HoverContent
-            },
-            MouseState::HoverH(x) => {
-                if let Event::Press(Key::LeftMouseButton, _) = event {
-                    capture = Capture::CaptureFocus(MouseStyle::Arrow);
-                    MouseState::ScrollH(x)
+            MouseState::Idle | MouseState::HoverContent => {
+                if context.cursor.inside(&content_rect) {
+                    MouseState::HoverContent
+                } else if context.cursor.inside(&horizontal_rect) {
+                    MouseState::HoverH
+                } else if context.cursor.inside(&vertical_rect) {
+                    MouseState::HoverV
                 } else {
-                    MouseState::HoverH(x)
+                    MouseState::Idle
                 }
             },
-            MouseState::HoverV(y) => {
-                if let Event::Press(Key::LeftMouseButton, _) = event {
-                    capture = Capture::CaptureFocus(MouseStyle::Arrow);
-                    MouseState::ScrollV(y)
+            MouseState::HoverH => {
+                if let Event::Press(Key::LeftMouseButton, _) = context.event {
+                    context.capture = Capture::CaptureFocus(MouseStyle::Arrow);
+                    MouseState::ScrollH(context.cursor.x - horizontal_rect.left)
+                } else if context.cursor.inside(&horizontal_rect) {
+                    MouseState::HoverH
                 } else {
-                    MouseState::HoverV(y)
+                    MouseState::Idle
+                }
+            },
+            MouseState::HoverV => {
+                if let Event::Press(Key::LeftMouseButton, _) = context.event {
+                    context.capture = Capture::CaptureFocus(MouseStyle::Arrow);
+                    MouseState::ScrollV(context.cursor.y - vertical_rect.top)
+                } else if context.cursor.inside(&vertical_rect) {
+                    MouseState::HoverV
+                } else {
+                    MouseState::Idle
                 }
             },
             MouseState::ScrollH(x) => {
-                capture = Capture::CaptureFocus(MouseStyle::Arrow);
+                context.capture = Capture::CaptureFocus(MouseStyle::Arrow);
 
-                let mut bar = layout.clone();
-                bar.top = bar.bottom - self.background_h.image.size.height();
-                if self.scrollable_v {
-                    bar.right = bar.right - self.background_v.image.size.width();
-                }
-                state.scroll.0 = handle_to_scroll(
-                    bar.left, 
-                    cursor.x-x, 
-                    bar.width(), 
-                    self.content.0,
-                    self.content.1
-                );
+                // TODO
 
-                if let Event::Release(Key::LeftMouseButton, _) = event {
+                if let Event::Release(Key::LeftMouseButton, _) = context.event {
                     MouseState::Idle
                 } else {
                     MouseState::ScrollH(x)
                 }
             },
             MouseState::ScrollV(y) => {
-                capture = Capture::CaptureFocus(MouseStyle::Arrow);
+                context.capture = Capture::CaptureFocus(MouseStyle::Arrow);
 
-                let mut bar = layout.clone();
-                bar.left = bar.right - self.background_v.image.size.width();
-                if self.scrollable_h {
-                    bar.bottom = bar.bottom - self.background_h.image.size.height();
-                }
-                state.scroll.1 = handle_to_scroll(
-                    bar.top, 
-                    cursor.y-y, 
-                    bar.height(), 
-                    self.content.2,
-                    self.content.3
-                );
+                // TODO
 
-                if let Event::Release(Key::LeftMouseButton, _) = event {
+                if let Event::Release(Key::LeftMouseButton, _) = context.event {
                     MouseState::Idle
                 } else {
                     MouseState::ScrollV(y)
@@ -146,13 +148,11 @@ impl WidgetBase for Scroll {
         };
 
         if state.inner != MouseState::Idle {
-            if let Event::Scroll(dx, dy) = event {
-                state.scroll.0 = (state.scroll.0 - dx).max(self.content.0).min(self.content.1);
-                state.scroll.1 = (state.scroll.1 - dy).max(self.content.2).min(self.content.3);
+            if let Event::Scroll(dx, dy) = context.event {
+                state.scroll.0 = (state.scroll.0 - dx).max(self.content.left).min(self.content.right);
+                state.scroll.1 = (state.scroll.1 - dy).max(self.content.top).min(self.content.bottom);
             }
         }
-
-        capture
     }
 }
 

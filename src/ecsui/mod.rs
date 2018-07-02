@@ -183,7 +183,7 @@ impl Ui {
             widgets: vec![],
             window: Viewport {
                 child_rect: viewport,
-                input_rect: viewport,
+                input_rect: Some(viewport),
             }
         }
     }
@@ -326,14 +326,17 @@ impl<'a> Drop for Context<'a> {
 
                 if focused || self.parent.capture == Capture::None {
                     let mut ctx = EventSystemContext {
-                        capture: widget.event(id, self.parent, event, focused),
+                        capture: Capture::None,
                         event,
                         cursor: MousePosition { 
                             x: self.parent.cursor.0, 
                             y: self.parent.cursor.1, 
-                            visibility: Some(self.window.input_rect) },
+                            visibility: self.window.input_rect 
+                        },
                         focused,
                     };
+
+                    widget.event(id, self.parent, &mut ctx);
 
                     for sys in self.parent.sys_event.iter() {
                         sys.run_for(&mut ctx, id, self.parent).ok();

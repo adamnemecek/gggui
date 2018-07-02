@@ -179,17 +179,12 @@ impl WidgetBase for LinearLayout {
 
         let viewport = Viewport {
             child_rect: layout.after_padding(),
-            input_rect: layout.after_padding().intersect(&viewport.input_rect).unwrap_or(Rect::from_wh(0.0, 0.0)),
+            input_rect: viewport.input_rect.and_then(|ir| ir.intersect(&layout.after_padding())),
         };
 
-        clipper.borrow_mut().rect = viewport.input_rect;
+        clipper.borrow_mut().rect = viewport.input_rect.unwrap_or(Rect::from_wh(0.0, 0.0));
 
         viewport
-    }
-
-    fn event(&mut self, _id: dag::Id, _world: &Ui, _ev: Event, _focus: bool) -> Capture {
-        // todo
-        Capture::None
     }
 }
 
