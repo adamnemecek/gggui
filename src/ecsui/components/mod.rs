@@ -1,13 +1,14 @@
 use super::*;
-use primitive::*;
 
 pub mod layout;
 pub mod background;
 pub mod clickable;
+pub mod clipper;
 
 pub use self::layout::*;
-pub use self::background::Background;
-pub use self::clickable::Clickable;
+pub use self::background::*;
+pub use self::clickable::*;
+pub use self::clipper::*;
 
 pub type Container<T> = Rc<RefCell<Vec<(Option<T>, usize)>>>;
 

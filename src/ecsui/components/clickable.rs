@@ -1,5 +1,3 @@
-use super::*;
-
 #[derive(Clone,Copy,Debug)]
 pub enum Clickable {
     Idle,

@@ -1,4 +1,5 @@
 use super::*;
+use ecsui::components::background::WidgetBackground;
 
 #[derive(Clone,Copy)]
 pub enum Flow {
@@ -10,6 +11,7 @@ pub enum Flow {
 
 pub struct LinearLayout {
     layout: Layout,
+    background: Option<Background>,
     flow: Flow,
 }
 
@@ -18,20 +20,37 @@ impl LinearLayout {
         Self {
             layout,
             flow,
+            background: None,
         }
+    }
+
+    pub fn with_bg(mut self, background: Background) -> Self {
+        self.background = Some(background);
+        self
     }
 }
 
 impl WidgetBase for LinearLayout {
-    fn create(&mut self, id: dag::Id, world: &mut Ui) {        
+    fn create(&mut self, id: dag::Id, world: &mut Ui) { 
+        self.background.take().map(|background| {
+            let bg = WidgetBackground {
+                normal: background.clone(),
+                hover: background.clone(),
+                click: background.clone(),
+            };
+            world.create_component(id, bg);
+        });   
         world.create_component(id, self.layout.clone());
+        world.create_component(id, Clipper{ rect: Rect::from_wh(0.0, 0.0) });
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, window: Rect) -> Rect {
+    fn update(&mut self, id: dag::Id, world: &Ui, viewport: Viewport) -> Viewport {
 
     	let mut layout: FetchComponent<Layout> = world.component(id).unwrap();
 
-    	let window = window.after_padding(layout.borrow().padding);
+        let mut clipper: FetchComponent<Clipper> = world.component(id).unwrap();
+
+    	let window = viewport.child_rect.after_padding(layout.borrow().padding);
 
     	let (r_to_l, b_to_t) = match self.flow {
     		Flow::LeftToRight => (false, false),
@@ -40,21 +59,24 @@ impl WidgetBase for LinearLayout {
     		Flow::BottomToTop => (false, true),
     	};
 
-    	let (mut cursor, limit) = {
+    	let (mut cursor, limit, grow) = {
     		let layout = layout.borrow();
             if layout.current.is_none() {
-                return window;
+                return viewport;
             }
 
             let rect = layout.after_padding();
-            let w = if let &Constraint::Fixed = &layout.constrain_width { &window } else { &rect };
-            let h = if let &Constraint::Fixed = &layout.constrain_height { &window } else { &rect };
-    		match self.flow {
+            let w = if let &Constraint::Fixed = &layout.constrain_width { &rect } else { &window };
+            let h = if let &Constraint::Fixed = &layout.constrain_height { &rect } else { &window };
+            let (cursor, limit) = match self.flow {
 	    		Flow::LeftToRight => ((rect.left, rect.top), (w.right, h.bottom)),
 	    		Flow::TopToBottom => ((rect.left, rect.top), (w.right, h.bottom)),
 	    		Flow::RightToLeft => ((rect.right, rect.top), (w.left, h.bottom)),
 	    		Flow::BottomToTop => ((rect.left, rect.bottom), (w.right, h.top)),
-    		}
+    		};
+            let gw = if let &Constraint::Grow = &layout.constrain_width { true } else { false };
+            let gh = if let &Constraint::Grow = &layout.constrain_height { true } else { false };
+            (cursor, limit, (gw, gh))
     	};
 
     	let mut extents = cursor.clone();
@@ -92,36 +114,36 @@ impl WidgetBase for LinearLayout {
     			};
 
     			// apply constraints
-    			if r_to_l {
-    				if cursor.0 < limit.0 {
-    					let delta = limit.0 - cursor.0;
-    					cursor.0 = limit.0;
-
-    					layout.current.as_mut().unwrap().left += delta;
-    				}
-    			} else {
-    				if cursor.0 > limit.0 {
-    					let delta = cursor.0 - limit.0;
-    					cursor.0 = limit.0;
-
-    					layout.current.as_mut().unwrap().right -= delta;
-    				}
-    			}
-    			if b_to_t {
-    				if cursor.1 < limit.1 {
-    					let delta = limit.1 - cursor.1;
-    					cursor.1 = limit.1;
-
-    					layout.current.as_mut().unwrap().top += delta;
-    				}
-    			} else {
-    				if cursor.1 > limit.1 {
-    					let delta = cursor.1 - limit.1;
-    					cursor.1 = limit.1;
-
-    					layout.current.as_mut().unwrap().bottom -= delta;
-    				}
-    			}
+                if !grow.0 {
+        			if r_to_l {
+        				if cursor.0 < limit.0 {
+        					let delta = limit.0 - cursor.0;
+        					cursor.0 = limit.0;
+        					layout.current.as_mut().unwrap().left += delta;
+        				}
+        			} else {
+        				if cursor.0 > limit.0 {
+        					let delta = cursor.0 - limit.0;
+        					cursor.0 = limit.0;
+        					layout.current.as_mut().unwrap().right -= delta;
+        				}
+        			}
+                }
+                if !grow.1 {
+        			if b_to_t {
+        				if cursor.1 < limit.1 {
+        					let delta = limit.1 - cursor.1;
+        					cursor.1 = limit.1;
+        					layout.current.as_mut().unwrap().top += delta;
+        				}
+        			} else {
+        				if cursor.1 > limit.1 {
+        					let delta = cursor.1 - limit.1;
+        					cursor.1 = limit.1;
+        					layout.current.as_mut().unwrap().bottom -= delta;
+        				}
+        			}
+                }
 
     			// validate rect
     			if !layout.current.map(|rect| rect.left < rect.right && rect.top < rect.bottom).unwrap_or(false) {
@@ -155,7 +177,14 @@ impl WidgetBase for LinearLayout {
     		Constraint::Fill => window.bottom + layout.padding.bottom,
     	};
 
-    	layout.after_padding()
+        let viewport = Viewport {
+            child_rect: layout.after_padding(),
+            input_rect: layout.after_padding().intersect(&viewport.input_rect).unwrap_or(Rect::from_wh(0.0, 0.0)),
+        };
+
+        clipper.borrow_mut().rect = viewport.input_rect;
+
+        viewport
     }
 
     fn event(&mut self, _id: dag::Id, _world: &Ui, _ev: Event, _focus: bool) -> Capture {

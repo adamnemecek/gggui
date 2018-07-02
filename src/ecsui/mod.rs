@@ -24,7 +24,7 @@ use loadable::*;
 use events::*;
 
 pub use self::widgets::*;
-use self::components::*;
+pub use self::components::*;
 use self::systems::*;
 
 pub type EventVec = SmallVec<[Event; 4]>;
@@ -96,7 +96,7 @@ pub struct Context<'a> {
     parent: &'a mut Ui,
     source: Option<String>,
     widgets: Vec<(dag::Id, Box<WidgetBase>)>,
-    window: Rect,
+    window: Viewport,
 }
 
 pub struct WidgetResult<'a, T: 'static + Widget> {
@@ -108,13 +108,16 @@ impl Ui {
     pub fn new() -> Self {
 
         let sys_render: Vec<Box<SystemDispatch<Vec<Primitive>>>> = vec![
-            Box::new(BackgroundRenderSystem{})
+            Box::new(BackgroundRenderSystem{}),
+            Box::new(ContentPushClipSystem{}),
         ];
 
-        let sys_render_post = vec![];
+        let sys_render_post: Vec<Box<SystemDispatch<Vec<Primitive>>>> = vec![
+            Box::new(ContentPopClipSystem{}),
+        ];
 
         let sys_event: Vec<Box<SystemDispatch<EventSystemContext>>> = vec![
-            Box::new(ClickableEventSystem{})
+            Box::new(ClickableEventSystem{}),
         ];
 
         Self {
@@ -153,9 +156,7 @@ impl Ui {
     }
 
     pub fn begin<'a>(&'a mut self, viewport: Rect, mut events: EventVec) -> Context<'a> {
-        let mut tree = self.tree.take().unwrap();
-
-        tree.ord.clear();
+        let tree = self.tree.take().unwrap();
 
         for event in events.iter() {
             match event {
@@ -180,7 +181,10 @@ impl Ui {
             parent: self,
             source: None,
             widgets: vec![],
-            window: viewport,
+            window: Viewport {
+                child_rect: viewport,
+                input_rect: viewport,
+            }
         }
     }
 
@@ -259,7 +263,7 @@ impl<'a> Context<'a> {
     //  future iterations.
     // If the widget has children, you must add them through the context in the returned WidgetResult
     pub fn add<'b, T: 'static + Widget>(&'b mut self, id: &str, mut w: T) -> WidgetResult<'b, T> {
-        let (internal_id, create, mut tree) = {
+        let (internal_id, create, tree) = {
             let top = self.parent.tree_stack.len()-1;
             let iteration = self.parent.iteration;
             let tree = &mut self.parent.tree_stack[top];
@@ -276,11 +280,11 @@ impl<'a> Context<'a> {
             w.create(internal_id, self.parent);
         }
 
-        tree.ord.clear();
+        //tree.ord.clear();
 
         self.parent.tree_stack.push(tree);
 
-        let sub_window = w.update(internal_id, self.parent, self.window);
+        let sub_window = w.update(internal_id, self.parent, self.window.clone());
 
         let result = w.result(internal_id);
 
@@ -296,6 +300,10 @@ impl<'a> Context<'a> {
             }
         }
     }
+
+    pub fn with<'b, F: FnOnce(&'b mut Context<'a>)>(&'b mut self, f: F) {
+        f(self);
+    }
 }
 
 // When the context is dropped, events and rendering will be evaluated and the results will be 
@@ -303,6 +311,14 @@ impl<'a> Context<'a> {
 impl<'a> Drop for Context<'a> {
     fn drop(&mut self) {
         let mut widgets = replace(&mut self.widgets, vec![]);
+
+        let mut tree = self.parent.tree_stack.pop().unwrap();
+
+        tree.ord.clear();
+
+        for &(id, _) in widgets.iter() {
+            tree.ord.push(id);
+        }
 
         for event in self.parent.events.clone() {
             for &mut(id, ref mut widget) in widgets.iter_mut() {
@@ -315,7 +331,7 @@ impl<'a> Drop for Context<'a> {
                         cursor: MousePosition { 
                             x: self.parent.cursor.0, 
                             y: self.parent.cursor.1, 
-                            visibility: Some(self.window) },
+                            visibility: Some(self.window.input_rect) },
                         focused,
                     };
 
@@ -348,8 +364,6 @@ impl<'a> Drop for Context<'a> {
                 }
             }
         }
-
-        let tree = self.parent.tree_stack.pop().unwrap();
 
         if self.source.is_some() {
             let top = self.parent.tree_stack.len()-1;

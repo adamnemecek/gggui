@@ -1,8 +1,8 @@
-use super::*;
+use primitive;
 
-#[derive(Clone,Debug)]
-pub struct Background {
-    pub normal: Patch,
-    pub hover: Patch,
-    pub click: Patch,
+#[derive(Clone)]
+pub struct WidgetBackground {
+    pub normal: primitive::Background,
+    pub hover: primitive::Background,
+    pub click: primitive::Background,
 }
