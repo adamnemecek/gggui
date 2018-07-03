@@ -94,6 +94,7 @@ pub struct Ui {
 
 pub struct Context<'a> {
     parent: &'a mut Ui,
+    style: &'a Style,
     source: Option<String>,
     widgets: Vec<(dag::Id, Box<WidgetBase>)>,
     window: Viewport,
@@ -158,7 +159,7 @@ impl Ui {
         self.cache.get_font(load)
     }
 
-    pub fn begin<'a>(&'a mut self, viewport: Rect, mut events: EventVec) -> Context<'a> {
+    pub fn begin<'a>(&'a mut self, style: &'a Style, viewport: Rect, mut events: EventVec) -> Context<'a> {
         let tree = self.tree.take().unwrap();
 
         for event in events.iter() {
@@ -182,6 +183,7 @@ impl Ui {
 
         Context {
             parent: self,
+            style,
             source: None,
             widgets: vec![],
             window: Viewport {
@@ -280,14 +282,14 @@ impl<'a> Context<'a> {
         };
 
         if create {
-            w.create(internal_id, self.parent);
+            w.create(internal_id, self.parent, self.style);
         }
 
         //tree.ord.clear();
 
         self.parent.tree_stack.push(tree);
 
-        let sub_window = w.update(internal_id, self.parent, self.window.clone());
+        let sub_window = w.update(internal_id, self.parent, self.style, self.window.clone());
 
         let result = w.result(internal_id);
 
@@ -297,11 +299,16 @@ impl<'a> Context<'a> {
             result,
             context: Context {
                 parent: self.parent,
+                style: self.style,
                 source: Some(id.to_string()),
                 widgets: vec![],
                 window: sub_window,
             }
         }
+    }
+
+    pub fn set_style(&mut self, style: &'a Style) {
+        self.style = style;
     }
 
     pub fn with<'b, F: FnOnce(&'b mut Context<'a>)>(&'b mut self, f: F) {
@@ -339,7 +346,7 @@ impl<'a> Drop for Context<'a> {
                         focused,
                     };
 
-                    widget.event(id, self.parent, &mut ctx);
+                    widget.event(id, self.parent, self.style, &mut ctx);
 
                     for sys in self.parent.sys_event.iter() {
                         sys.run_for(&mut ctx, id, self.parent).ok();

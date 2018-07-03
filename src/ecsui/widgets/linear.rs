@@ -31,7 +31,7 @@ impl LinearLayout {
 }
 
 impl WidgetBase for LinearLayout {
-    fn create(&mut self, id: dag::Id, world: &mut Ui) { 
+    fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style) { 
         self.background.take().map(|background| {
             let bg = WidgetBackground {
                 normal: background.clone(),
@@ -44,7 +44,7 @@ impl WidgetBase for LinearLayout {
         world.create_component(id, Clipper{ rect: Rect::from_wh(0.0, 0.0), intersect: true });
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, viewport: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, viewport: Viewport) -> Viewport {
 
     	let mut layout: FetchComponent<Layout> = world.component(id).unwrap();
 

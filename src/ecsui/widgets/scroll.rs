@@ -47,7 +47,7 @@ impl Scroll {
 }
 
 impl WidgetBase for Scroll {
-    fn create(&mut self, id: dag::Id, world: &mut Ui) {
+    fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style) {
         world.create_component(id, ScrollState {
             scroll: (0.0, 0.0),
             inner: MouseState::Idle,
@@ -58,8 +58,8 @@ impl WidgetBase for Scroll {
             padding: Rect { 
                 left: 0.0, 
                 top: 0.0, 
-                right: if self.vertical { 16.0 } else { 0.0 }, 
-                bottom: if self.horizontal { 16.0 } else { 0.0 }, 
+                right: if self.vertical { style.scroll_vertical.0.image.size.width() } else { 0.0 }, 
+                bottom: if self.horizontal { style.scroll_horizontal.0.image.size.width() } else { 0.0 }, 
             },
             constrain_width: Constraint::Fixed,
             constrain_height: Constraint::Fixed,
@@ -73,7 +73,7 @@ impl WidgetBase for Scroll {
         });
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, window: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, window: Viewport) -> Viewport {
         let mut state = world.component::<ScrollState>(id).unwrap();
         let mut state = state.borrow_mut().clone();
 
@@ -129,7 +129,7 @@ impl WidgetBase for Scroll {
         viewport
     }
 
-    fn event(&mut self, id: dag::Id, world: &Ui, context: &mut EventSystemContext) {
+    fn event(&mut self, id: dag::Id, world: &Ui, style: &Style, context: &mut EventSystemContext) {
         let mut state: FetchComponent<ScrollState> = world.component(id).unwrap();
         let mut state = state.borrow_mut();
 
@@ -173,10 +173,22 @@ impl WidgetBase for Scroll {
         let mut drawing = drawing.borrow_mut();
         drawing.primitives.clear();
         if self.horizontal {
-            drawing.primitives.push(Primitive::DrawRect(horizontal_rect, Color::black()));
+            drawing.primitives.push(Primitive::Draw9(style.scroll_horizontal.0.clone(), Rect { 
+                left: current.left, 
+                top: padded.bottom, 
+                right: padded.right, 
+                bottom: current.bottom 
+            }, Color::white()));
+            drawing.primitives.push(Primitive::Draw9(style.scroll_horizontal.1.clone(), horizontal_rect, Color::white()));
         }
         if self.vertical {
-            drawing.primitives.push(Primitive::DrawRect(vertical_rect, Color::black()));   
+            drawing.primitives.push(Primitive::Draw9(style.scroll_vertical.0.clone(), Rect { 
+                left: padded.right, 
+                top: current.top, 
+                right: current.right, 
+                bottom: padded.bottom 
+            }, Color::white()));
+            drawing.primitives.push(Primitive::Draw9(style.scroll_vertical.1.clone(), vertical_rect, Color::white()));
         }
 
         state.inner = match state.inner {

@@ -27,14 +27,11 @@ impl Button {
 }
 
 impl WidgetBase for Button {
-    fn create(&mut self, id: dag::Id, world: &mut Ui) {
+    fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style) {
         let background = WidgetBackground{
-            normal: Background::Patch(
-                world.get_patch(load_from_static_memory!("../../../img/button_normal.png")), 1.0),
-            hover: Background::Patch(
-                world.get_patch(load_from_static_memory!("../../../img/button_hover.png")), 1.0),
-            click: Background::Patch(
-                world.get_patch(load_from_static_memory!("../../../img/button_pressed.png")), 1.0),
+            normal: Background::Patch(style.button_normal.clone(), 1.0),
+            hover: Background::Patch(style.button_hover.clone(), 1.0),
+            click: Background::Patch(style.button_pressed.clone(), 1.0),
         };
 
         world.create_component(id, self.layout.clone());
@@ -42,7 +39,7 @@ impl WidgetBase for Button {
         world.create_component(id, Clickable::Idle);
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, _window: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &Ui, _style: &Style, _window: Viewport) -> Viewport {
         let mut clickable = world.component::<Clickable>(id);
         let clickable = clickable.as_mut().unwrap();
         let mut clickable = clickable.borrow_mut();
