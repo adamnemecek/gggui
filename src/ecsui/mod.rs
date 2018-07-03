@@ -107,13 +107,16 @@ pub struct WidgetResult<'a, T: 'static + Widget> {
 impl Ui {
     pub fn new() -> Self {
 
+        let (clip_push, clip_pop) = new_clip_system();
+
         let sys_render: Vec<Box<SystemDispatch<Vec<Primitive>>>> = vec![
             Box::new(BackgroundRenderSystem{}),
-            Box::new(ContentPushClipSystem{}),
+            Box::new(clip_push),
         ];
 
         let sys_render_post: Vec<Box<SystemDispatch<Vec<Primitive>>>> = vec![
-            Box::new(ContentPopClipSystem{}),
+            Box::new(clip_pop),
+            Box::new(DrawingRenderSystem{}),
         ];
 
         let sys_event: Vec<Box<SystemDispatch<EventSystemContext>>> = vec![

@@ -16,6 +16,7 @@ pub use self::text::*;
 pub use self::patch::*;
 pub use self::image::*;
 
+#[derive(Clone)]
 pub enum Primitive {
     PushClip(Rect),
     PopClip,

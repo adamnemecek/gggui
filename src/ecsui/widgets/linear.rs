@@ -41,7 +41,7 @@ impl WidgetBase for LinearLayout {
             world.create_component(id, bg);
         });   
         world.create_component(id, self.layout.clone());
-        world.create_component(id, Clipper{ rect: Rect::from_wh(0.0, 0.0) });
+        world.create_component(id, Clipper{ rect: Rect::from_wh(0.0, 0.0), intersect: true });
     }
 
     fn update(&mut self, id: dag::Id, world: &Ui, viewport: Viewport) -> Viewport {
@@ -84,15 +84,15 @@ impl WidgetBase for LinearLayout {
     	for child in world.children() {
     		world.component(*child).map(|mut layout: FetchComponent<Layout>| {
     			let mut layout = layout.borrow_mut();
-    			let w = layout.current.map(|c| c.width() + layout.margin.left + layout.margin.right);
-                let h = layout.current.map(|c| c.height() + layout.margin.top + layout.margin.bottom);
+    			let w = layout.current.as_ref().map(|c| c.width() + layout.margin.left + layout.margin.right);
+                let h = layout.current.as_ref().map(|c| c.height() + layout.margin.top + layout.margin.bottom);
                 let w = match &layout.constrain_width {
-                    Constraint::Fixed => w.unwrap(),
+                    Constraint::Fixed => w.unwrap_or(0.0),
                     Constraint::Grow => w.unwrap_or(0.0),
                     Constraint::Fill => (cursor.0 - limit.0).abs(),
                 };
                 let h = match &layout.constrain_height {
-                	Constraint::Fixed => h.unwrap(),
+                	Constraint::Fixed => h.unwrap_or(0.0),
                 	Constraint::Grow => h.unwrap_or(0.0),
                 	Constraint::Fill => (cursor.1 - limit.1).abs(),
                 };
@@ -182,7 +182,7 @@ impl WidgetBase for LinearLayout {
             input_rect: viewport.input_rect.and_then(|ir| ir.intersect(&layout.after_padding())),
         };
 
-        clipper.borrow_mut().rect = viewport.input_rect.unwrap_or(Rect::from_wh(0.0, 0.0));
+        clipper.borrow_mut().rect = viewport.child_rect;
 
         viewport
     }

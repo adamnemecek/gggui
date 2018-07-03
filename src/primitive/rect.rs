@@ -133,7 +133,7 @@ impl Rect {
         Rect {
             left: self.left - margin.left,
             top: self.top - margin.top,
-            right: self.right + margin.top,
+            right: self.right + margin.right,
             bottom: self.bottom + margin.bottom,
         }
     }
@@ -142,7 +142,7 @@ impl Rect {
         Rect {
             left: self.left + padding.left,
             top: self.top + padding.top,
-            right: self.right - padding.top,
+            right: self.right - padding.right,
             bottom: self.bottom - padding.bottom,
         }
     }

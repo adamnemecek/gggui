@@ -2,13 +2,16 @@ use super::*;
 use primitive::Primitive;
 
 pub mod background_render;
+pub mod drawing_render;
 pub mod clickable_event;
 pub mod content_clip;
 
 pub use self::background_render::BackgroundRenderSystem;
+pub use self::drawing_render::DrawingRenderSystem;
 pub use self::clickable_event::ClickableEventSystem;
 pub use self::content_clip::ContentPushClipSystem;
 pub use self::content_clip::ContentPopClipSystem;
+pub use self::content_clip::new_clip_system;
 
 pub trait System<C> {
     type Components: SystemComponents;

@@ -4,11 +4,13 @@ pub mod layout;
 pub mod background;
 pub mod clickable;
 pub mod clipper;
+pub mod drawing;
 
 pub use self::layout::*;
 pub use self::background::*;
 pub use self::clickable::*;
 pub use self::clipper::*;
+pub use self::drawing::*;
 
 pub type Container<T> = Rc<RefCell<Vec<(Option<T>, usize)>>>;
 

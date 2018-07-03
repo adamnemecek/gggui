@@ -29,7 +29,7 @@ impl Layout {
 
     pub fn grow() -> Self {
         Self {
-            current: Some(Rect::from_wh(0.0, 0.0)),
+            current: None,
             margin: Rect::from_wh(0.0, 0.0),
             padding: Rect::from_wh(0.0, 0.0),
             constrain_width: Constraint::Grow,
