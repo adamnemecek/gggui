@@ -2,12 +2,14 @@ use super::*;
 
 pub mod label;
 pub mod button;
+pub mod toggle;
 pub mod linear;
 pub mod scroll;
 pub mod input;
 
 pub use self::label::*;
 pub use self::button::*;
+pub use self::toggle::*;
 pub use self::linear::*;
 pub use self::scroll::*;
 pub use self::input::*;

@@ -18,6 +18,15 @@ impl Rect {
         }
     }
 
+    pub fn zero() -> Rect {
+        Rect {
+            left: 0.0,
+            right: 0.0,
+            top: 0.0,
+            bottom: 0.0,
+        }
+    }
+
     pub fn from_wh(w: f32, h: f32) -> Rect {
         Rect {
             left: 0.0,

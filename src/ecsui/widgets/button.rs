@@ -39,7 +39,7 @@ impl WidgetBase for Button {
         world.create_component(id, Clickable::Idle);
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, _style: &Style, _window: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, _window: Viewport) -> Viewport {
         let mut clickable = world.component::<Clickable>(id);
         let clickable = clickable.as_mut().unwrap();
         let mut clickable = clickable.borrow_mut();
@@ -52,8 +52,22 @@ impl WidgetBase for Button {
             x => x,
         };
 
+        let layout = world.component::<Layout>(id).unwrap();
+        let content = layout.borrow().current
+            .map(|rect| style.button_normal.content_rect(rect))
+            .unwrap_or(Rect::from_wh(0.0, 0.0));
+
+        for child in world.children() {
+            world.component(*child).map(|mut layout: FetchComponent<Layout>| {
+                let mut layout = layout.borrow_mut();
+                layout.current = Some(content);
+                layout.constrain_width = Constraint::Fixed;
+                layout.constrain_height = Constraint::Fixed;
+            });
+        }
+
         Viewport {
-            child_rect: Rect::from_wh(0.0, 0.0),
+            child_rect: content,
             input_rect: None,
         }
     }
