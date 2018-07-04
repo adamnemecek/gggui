@@ -41,6 +41,8 @@ pub struct EventSystemContext {
     pub event: Event,
     pub focused: bool,
     pub cursor: MousePosition,
+    pub style: MouseStyle,
+    pub mode: MouseMode,
 }
 
 impl MousePosition {
@@ -96,11 +98,11 @@ pub struct Context<'a> {
     parent: &'a mut Ui,
     style: &'a Style,
     source: Option<String>,
-    widgets: Vec<(dag::Id, Box<WidgetBase>)>,
+    widgets: Vec<(dag::Id, Box<'a + WidgetBase>)>,
     window: Viewport,
 }
 
-pub struct WidgetResult<'a, T: 'static + Widget> {
+pub struct WidgetResult<'a, T: 'a + Widget> {
     pub result: T::Result,
     pub context: Context<'a>,
 }
@@ -116,6 +118,7 @@ impl Ui {
         ];
 
         let sys_render_post: Vec<Box<SystemDispatch<Vec<Primitive>>>> = vec![
+            Box::new(TextRenderSystem{}),
             Box::new(clip_pop),
             Box::new(DrawingRenderSystem{}),
         ];
@@ -180,6 +183,8 @@ impl Ui {
         self.tree_stack.push(tree);
 
         self.capture = Capture::None;
+
+        self.mouse_style = MouseStyle::Arrow;
 
         Context {
             parent: self,
@@ -267,7 +272,7 @@ impl<'a> Context<'a> {
     // The specified id should be unique within this context, it is used to find it's state in
     //  future iterations.
     // If the widget has children, you must add them through the context in the returned WidgetResult
-    pub fn add<'b, T: 'static + Widget>(&'b mut self, id: &str, mut w: T) -> WidgetResult<'b, T> {
+    pub fn add<'b, T: 'a + Widget>(&'b mut self, id: &str, mut w: T) -> WidgetResult<'b, T> {
         let (internal_id, create, tree) = {
             let top = self.parent.tree_stack.len()-1;
             let iteration = self.parent.iteration;
@@ -343,6 +348,8 @@ impl<'a> Drop for Context<'a> {
                             y: self.parent.cursor.1, 
                             visibility: self.window.input_rect 
                         },
+                        style: self.parent.mouse_style,
+                        mode: self.parent.mouse_mode,
                         focused,
                     };
 
@@ -351,6 +358,9 @@ impl<'a> Drop for Context<'a> {
                     for sys in self.parent.sys_event.iter() {
                         sys.run_for(&mut ctx, id, self.parent).ok();
                     }
+
+                    self.parent.mouse_style = ctx.style;
+                    self.parent.mouse_mode = ctx.mode;
 
                     match ctx.capture {
                         Capture::CaptureFocus(mouse_style) => {

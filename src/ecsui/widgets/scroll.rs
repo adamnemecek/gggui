@@ -78,15 +78,15 @@ impl WidgetBase for Scroll {
         let mut state = state.borrow_mut().clone();
 
         let layout = world.component::<Layout>(id).unwrap();
-        let parent = layout.borrow().current.unwrap();
-        let rect = layout.borrow().after_padding();
+        let current = layout.borrow().current.unwrap();
+        let padded = layout.borrow().after_padding();
 
         let mut clipper = world.component::<Clipper>(id).unwrap();
         clipper.borrow_mut().rect = layout.borrow().current.unwrap();
 
         let mut viewport = Viewport {
-            child_rect: rect,
-            input_rect: window.input_rect.and_then(|ir| ir.intersect(&rect)),
+            child_rect: padded,
+            input_rect: window.input_rect.and_then(|ir| ir.intersect(&padded)),
         };
 
         for child in world.children() {
@@ -117,8 +117,8 @@ impl WidgetBase for Scroll {
                 self.content = layout.current.map(|content| Rect {
                     left: 0.0,
                     top: 0.0,
-                    right:  (content.width() - parent.width()).max(0.0),
-                    bottom: (content.height() - parent.height()).max(0.0),
+                    right:  (content.width() - current.width()).max(0.0),
+                    bottom: (content.height() - current.height()).max(0.0),
                 }).unwrap();
             });
         }
@@ -126,10 +126,62 @@ impl WidgetBase for Scroll {
         state.scroll.0 = (state.scroll.0).max(self.content.left).min(self.content.right);
         state.scroll.1 = (state.scroll.1).max(self.content.top).min(self.content.bottom);
 
+        let vertical_rect = {
+            let mut bar = Rect { 
+                left: padded.right, 
+                top: current.top, 
+                right: current.right, 
+                bottom: padded.bottom 
+            };
+            let handle_range = 
+                handle_range(bar.top, state.scroll.1, bar.height(), self.content.top, self.content.bottom);
+            bar.top = handle_range.0;
+            bar.bottom = handle_range.1;
+            bar
+        };
+
+        let horizontal_rect = {
+            let mut bar = Rect { 
+                left: current.left, 
+                top: padded.bottom, 
+                right: padded.right, 
+                bottom: current.bottom 
+            };
+            let handle_range = 
+                handle_range(bar.left, state.scroll.0, bar.width(), self.content.left, self.content.right);
+            bar.left = handle_range.0;
+            bar.right = handle_range.1;
+            bar
+        };
+
+        let mut drawing = world.component::<Drawing>(id).unwrap();
+        let mut drawing = drawing.borrow_mut();
+        drawing.primitives.clear();
+        
+        if self.horizontal {
+            drawing.primitives.push(Primitive::Draw9(style.scroll_horizontal.0.clone(), Rect { 
+                left: current.left, 
+                top: padded.bottom, 
+                right: padded.right, 
+                bottom: current.bottom 
+            }, Color::white()));
+            drawing.primitives.push(Primitive::Draw9(style.scroll_horizontal.1.clone(), horizontal_rect, Color::white()));
+        }
+
+        if self.vertical {
+            drawing.primitives.push(Primitive::Draw9(style.scroll_vertical.0.clone(), Rect { 
+                left: padded.right, 
+                top: current.top, 
+                right: current.right, 
+                bottom: padded.bottom 
+            }, Color::white()));
+            drawing.primitives.push(Primitive::Draw9(style.scroll_vertical.1.clone(), vertical_rect, Color::white()));
+        }
+
         viewport
     }
 
-    fn event(&mut self, id: dag::Id, world: &Ui, style: &Style, context: &mut EventSystemContext) {
+    fn event(&mut self, id: dag::Id, world: &Ui, _style: &Style, context: &mut EventSystemContext) {
         let mut state: FetchComponent<ScrollState> = world.component(id).unwrap();
         let mut state = state.borrow_mut();
 
@@ -168,28 +220,6 @@ impl WidgetBase for Scroll {
             bar.right = handle_range.1;
             bar
         };
-
-        let mut drawing = world.component::<Drawing>(id).unwrap();
-        let mut drawing = drawing.borrow_mut();
-        drawing.primitives.clear();
-        if self.horizontal {
-            drawing.primitives.push(Primitive::Draw9(style.scroll_horizontal.0.clone(), Rect { 
-                left: current.left, 
-                top: padded.bottom, 
-                right: padded.right, 
-                bottom: current.bottom 
-            }, Color::white()));
-            drawing.primitives.push(Primitive::Draw9(style.scroll_horizontal.1.clone(), horizontal_rect, Color::white()));
-        }
-        if self.vertical {
-            drawing.primitives.push(Primitive::Draw9(style.scroll_vertical.0.clone(), Rect { 
-                left: padded.right, 
-                top: current.top, 
-                right: current.right, 
-                bottom: padded.bottom 
-            }, Color::white()));
-            drawing.primitives.push(Primitive::Draw9(style.scroll_vertical.1.clone(), vertical_rect, Color::white()));
-        }
 
         state.inner = match state.inner {
             MouseState::Idle | MouseState::HoverContent => {

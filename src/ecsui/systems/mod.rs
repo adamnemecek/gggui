@@ -2,11 +2,13 @@ use super::*;
 use primitive::Primitive;
 
 pub mod background_render;
+pub mod text_render;
 pub mod drawing_render;
 pub mod clickable_event;
 pub mod content_clip;
 
 pub use self::background_render::BackgroundRenderSystem;
+pub use self::text_render::TextRenderSystem;
 pub use self::drawing_render::DrawingRenderSystem;
 pub use self::clickable_event::ClickableEventSystem;
 pub use self::content_clip::ContentPushClipSystem;
