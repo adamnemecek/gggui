@@ -72,10 +72,17 @@ impl MousePosition {
     }
 }
 
+struct Window {
+    id: String,
+    tree: Option<dag::Tree>,
+    used: usize,
+    modal: bool,
+}
+
 pub struct Ui {
     iteration: usize,
     focus: Option<dag::Id>,
-    tree: Option<dag::Tree>,
+    windows: Vec<Window>,
     tree_stack: Vec<dag::Tree>,
     free: dag::FreeList,
     containers: HashMap<TypeId, Box<Any>>,
@@ -97,6 +104,7 @@ pub struct Ui {
 pub struct Context<'a> {
     parent: &'a mut Ui,
     style: &'a Style,
+    id: &'a str,
     source: Option<String>,
     widgets: Vec<(dag::Id, Box<'a + WidgetBase>)>,
     window: Viewport,
@@ -130,7 +138,7 @@ impl Ui {
         Self {
             iteration: 1,
             focus: None,
-            tree: Some(dag::Tree::new()),
+            windows: vec![],
             tree_stack: vec![],
             free: dag::FreeList::new(),
             containers: HashMap::new(),
@@ -162,9 +170,7 @@ impl Ui {
         self.cache.get_font(load)
     }
 
-    pub fn begin<'a>(&'a mut self, style: &'a Style, viewport: Rect, mut events: EventVec) -> Context<'a> {
-        let tree = self.tree.take().unwrap();
-
+    pub fn update(&mut self, viewport: Rect, events: EventVec) {
         for event in events.iter() {
             match event {
                 &Event::Cursor(x, y) => self.cursor = (x, y),
@@ -172,43 +178,76 @@ impl Ui {
             }
         }
 
-        if events.len() == 0 {
-            events.push(Event::Idle);
-        }
-
         self.viewport = viewport;
 
         self.events = events;
 
-        self.tree_stack.push(tree);
-
         self.capture = Capture::None;
 
         self.mouse_style = MouseStyle::Arrow;
+    }
+
+    pub fn window<'a>(&'a mut self, style: &'a Style, id: &'a str, modal: bool) -> Context<'a> {
+        let mut tree = None;
+        
+        // find window
+        for win in self.windows.iter_mut() {
+            if win.id == id {
+                assert!(win.tree.is_some());
+                win.used = self.iteration;
+                tree = win.tree.take();
+                break;
+            }
+        }
+
+        // window not found? make a new one
+        if tree.is_none() {
+            self.windows.push(Window {
+                id: id.to_string(),
+                tree: None,
+                used: self.iteration,
+                modal,
+            });
+            tree = Some(dag::Tree::new());
+        }
+
+        self.tree_stack.push(tree.unwrap());
+
+        let viewport = Viewport {
+                child_rect: self.viewport,
+                input_rect: Some(self.viewport),
+            };
 
         Context {
             parent: self,
             style,
+            id,
             source: None,
             widgets: vec![],
-            window: Viewport {
-                child_rect: viewport,
-                input_rect: Some(viewport),
-            }
+            window: viewport,
         }
     }
 
-    pub fn end(&mut self) -> (DrawList, MouseStyle, MouseMode) {
-        let mut tree = self.tree.take().unwrap();
+    pub fn render(&mut self) -> (DrawList, MouseStyle, MouseMode) {
+        let mut drawlists = vec![];
 
-        tree.cleanup(self.iteration, &mut self.free);
+        let mut windows = replace(&mut self.windows, vec![]);
+
+        for win in windows.iter_mut() {
+            let tree = win.tree.as_mut().unwrap();
+            tree.cleanup(self.iteration, &mut self.free);
+            if win.used >= self.iteration {
+                drawlists.push(self.run_systems(tree));
+            }
+        }
+
+        windows.retain(|win| win.used >= self.iteration);
+
+        self.windows = windows;
+
         self.iteration += 1;
 
-        let primitives = self.run_systems(&mut tree);
-
-        self.tree = Some(tree);
-
-        let drawlist = self.render(primitives);
+        let drawlist = self.render_internal(drawlists);
 
         (drawlist, self.mouse_style, self.mouse_mode)
     }
@@ -305,6 +344,7 @@ impl<'a> Context<'a> {
             context: Context {
                 parent: self.parent,
                 style: self.style,
+                id: self.id,
                 source: Some(id.to_string()),
                 widgets: vec![],
                 window: sub_window,
@@ -328,6 +368,8 @@ impl<'a> Drop for Context<'a> {
         let mut widgets = replace(&mut self.widgets, vec![]);
 
         let mut tree = self.parent.tree_stack.pop().unwrap();
+
+        let mut activate_window = false;
 
         tree.ord.clear();
 
@@ -366,10 +408,12 @@ impl<'a> Drop for Context<'a> {
                         Capture::CaptureFocus(mouse_style) => {
                             self.parent.capture = Capture::CaptureFocus(mouse_style);
                             self.parent.focus = Some(id);
+                            activate_window = true;
                         },
                         Capture::CaptureMouse(mouse_style) => {
                             self.parent.capture = Capture::CaptureMouse(mouse_style);
                             self.parent.focus = Some(id);
+                            activate_window = true;
                         },
                         _ => if focused {
                             match event {
@@ -388,6 +432,21 @@ impl<'a> Drop for Context<'a> {
             }
         }
 
+        // if the window is activated, move it to the back of the window vec
+        if activate_window {
+            let mut i = self.parent.windows.len() - 1;
+            loop {
+                if self.parent.windows[i].id == self.id {
+                    let w = self.parent.windows.remove(i);
+                    self.parent.windows.push(w);
+                    break;
+                }
+
+                assert!(i > 0);
+                i -= 1;
+            }
+        }
+
         if self.source.is_some() {
             let top = self.parent.tree_stack.len()-1;
             let src = self.source.as_ref().unwrap();
@@ -396,19 +455,17 @@ impl<'a> Drop for Context<'a> {
             }
         } else {
             assert!(self.parent.tree_stack.len() == 0);
-            self.parent.tree = Some(tree);
+
+            let id = self.id;
+            self.parent.windows.iter_mut().rev().find(|win| win.id == id).unwrap().tree = Some(tree);
         }
     }
 }
 
 impl Ui {
-    fn render(&mut self, drawlist: Vec<Primitive>) -> DrawList {
+    fn render_internal(&mut self, draw_lists: Vec<Vec<Primitive>>) -> DrawList {
         self.previous_capture = self.capture;
-        //self.windows.retain(|w| w.updated);
-        //if let Some(&Window{ updated: false, .. }) = self.ui.active_window.as_ref() {
-        //    self.ui.active_window = None;
-        //}
-
+       
         // drop focus if nothing was clicked
         if let Capture::None = self.capture {
             for event in self.events.iter() {
@@ -425,14 +482,6 @@ impl Ui {
         scissors.push(self.viewport);
 
         let mut current_command = Command::Nop;
-
-        let draw_lists = vec![drawlist];
-        //for window in self.ui.windows.iter_mut() {
-        //    draw_lists.push(replace(&mut window.drawlist, vec![]));
-        //}
-        //for window in self.ui.active_window.iter_mut() {
-        //    draw_lists.push(replace(&mut window.drawlist, vec![]));
-        //}
 
         let vp = self.viewport.clone();
         let validate_clip = |clip: Rect| {
