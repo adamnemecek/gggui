@@ -16,8 +16,8 @@ pub use self::input::*;
 
 #[derive(Clone)]
 pub struct Viewport {
-	pub child_rect: Rect,
-	pub input_rect: Option<Rect>,
+    pub child_rect: Rect,
+    pub input_rect: Option<Rect>,
 }
 
 pub trait WidgetBase {
@@ -37,38 +37,38 @@ pub trait Widget: WidgetBase {
 }
 
 pub struct Style {
-	pub font: (Font, usize),
+    pub font: (Font, usize),
 
-	pub button_normal: Patch,
-	pub button_hover: Patch,
-	pub button_pressed: Patch,
+    pub button_normal: Patch,
+    pub button_hover: Patch,
+    pub button_pressed: Patch,
 
-	pub input: Patch,
+    pub input: Patch,
 
-	pub checkbox_checked_normal: Image,
-	pub checkbox_checked_hover: Image,
-	pub checkbox_checked_pressed: Image,
-	pub checkbox_normal: Image,
-	pub checkbox_hover: Image,
-	pub checkbox_pressed: Image,
+    pub checkbox_checked_normal: Image,
+    pub checkbox_checked_hover: Image,
+    pub checkbox_checked_pressed: Image,
+    pub checkbox_normal: Image,
+    pub checkbox_hover: Image,
+    pub checkbox_pressed: Image,
 
-	pub radio_checked_normal: Image,
-	pub radio_checked_hover: Image,
-	pub radio_checked_pressed: Image,
-	pub radio_normal: Image,
-	pub radio_hover: Image,
-	pub radio_pressed: Image,
+    pub radio_checked_normal: Image,
+    pub radio_checked_hover: Image,
+    pub radio_checked_pressed: Image,
+    pub radio_normal: Image,
+    pub radio_hover: Image,
+    pub radio_pressed: Image,
 
-	pub scroll_horizontal: (Patch, Patch),
-	pub scroll_vertical: (Patch, Patch),
+    pub scroll_horizontal: (Patch, Patch),
+    pub scroll_vertical: (Patch, Patch),
 
-	pub window: Patch,
+    pub window: Patch,
 }
 
 impl Style {
-	pub fn default(ui: &mut Ui) -> Self {
-		Self {
-			button_normal: 
+    pub fn default(ui: &mut Ui) -> Self {
+        Self {
+            button_normal: 
                 ui.get_patch(load_from_static_memory!("../../../img/button_normal.png")),
             button_hover: 
                 ui.get_patch(load_from_static_memory!("../../../img/button_hover.png")),
@@ -110,6 +110,6 @@ impl Style {
             scroll_vertical: 
                 (ui.get_patch(load_from_static_memory!("../../../img/scroll_bg.png")),
                  ui.get_patch(load_from_static_memory!("../../../img/scroll_bar.png"))),
-		}
-	}
+        }
+    }
 }
