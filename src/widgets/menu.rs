@@ -1,6 +1,5 @@
 use super::*;
 use std::mem::replace;
-use std::default::Default;
 use std::time::Instant;
 
 pub enum MenuItem<'a, T: 'a> {
@@ -22,20 +21,137 @@ pub enum MenuState {
     Hover(f32, f32, MenuPath, Instant),
 }
 
-impl WidgetState for MenuState { }
-
-impl Default for MenuState {
-    fn default() -> Self {
-        MenuState::Idle
+impl<'a, T:'a> Menu<'a, T> {
+    pub fn new(menu: &'a[MenuItem<'a, T>]) -> Self {
+        Self {
+            menu, result: None
+        }
     }
 }
 
-impl<'a, T> Menu<'a, T> {
-    pub fn new(menu: &'a[MenuItem<'a, T>]) -> Self {
-        Menu {
-            menu,
-            result: None,
+impl<'a, T:'a> WidgetBase for Menu<'a, T> {
+    fn create(&mut self, id: dag::Id, world: &mut Ui, _style: &Style) {
+        world.create_component(id, Drawing{ primitives: vec![] });
+        world.create_component(id, MenuState::Idle);
+    }
+
+    fn update(&mut self, _id: dag::Id, _world: &Ui, _style: &Style, _window: Viewport) -> Viewport {
+        Viewport {
+            child_rect: Rect::zero(),
+            input_rect: None,
         }
+    }
+
+    fn event(&mut self, id: dag::Id, world: &Ui, _style: &Style, context: &mut EventSystemContext) {
+        let mut state = world.component::<MenuState>(id).unwrap();
+        let mut state = state.borrow_mut();
+
+        let mut drawing = world.component::<Drawing>(id).unwrap();
+        let mut drawing = drawing.borrow_mut();
+
+        // handle hovering
+        *state = match replace(state.deref_mut(), MenuState::Idle) {
+            MenuState::Idle => {
+                MenuState::Idle
+            },
+
+            MenuState::Hover(x, y, mut path, mut time) => {
+                time = for_each_item(
+                    self.menu, 
+                    0, (x, y), 
+                    BorrowMutMenuPath{ x: &mut path }, 
+                    time,
+                    |rect, _, _, _| {
+                        context.cursor.inside(&rect)
+                    }
+                );
+                MenuState::Hover(x, y, path, time)
+            },
+        };
+
+        // handle event
+        *state = match replace(state.deref_mut(), MenuState::Idle) {
+            MenuState::Idle => {
+                if let Event::Press(Key::RightMouseButton, _) = context.event {
+                    context.capture = Capture::CaptureFocus(MouseStyle::ArrowClicking);
+                    MenuState::Hover(context.cursor.x, context.cursor.y, MenuPath::new(), Instant::now())
+                } else {
+                    MenuState::Idle
+                }
+            },
+            MenuState::Hover(x, y, path, time)  => {
+                context.capture = Capture::CaptureFocus(MouseStyle::Arrow);
+
+                let mut cursor_outside = true;
+                for_each_item(
+                    self.menu, 
+                    0, (x, y), 
+                    BorrowMenuPath{ x: &path }, 
+                    time,
+                    |rect, item, hovered, _| {
+                        if context.cursor.inside(&rect) {
+                            cursor_outside = false;
+                            match &context.event {
+                                &Event::Press(Key::LeftMouseButton, _) => {
+                                    self.result = Some(item);
+                                },
+                                &_ => (),
+                            }
+                        }
+                        hovered
+                    }
+                );
+
+                if self.result.is_some() {
+                    MenuState::Idle
+                } else if cursor_outside {
+                    match context.event {
+                        Event::Press(Key::LeftMouseButton, _) => {
+                            MenuState::Idle
+                        },
+                        Event::Press(Key::RightMouseButton, _) => {
+                            MenuState::Hover(context.cursor.x, context.cursor.y, MenuPath::new(), Instant::now())
+                        },
+                        _ => {
+                            MenuState::Hover(x, y, path, time)
+                        },
+                    }
+                } else {
+                    MenuState::Hover(x, y, path, time)
+                }
+            },
+        };
+
+        drawing.primitives.clear();
+        if context.focused {
+            match state.deref() {
+                &MenuState::Idle => (),
+                &MenuState::Hover(x, y, ref path, time) => {
+                    for_each_item(
+                        self.menu, 
+                        0, (x, y), 
+                        BorrowMenuPath{ x: &path }, 
+                        time,
+                        |rect, _, hovered, _| {
+                            if hovered {
+                                drawing.primitives.push(Primitive::DrawRect(rect, Color{ r: 0.0, g: 0.0, b: 1.0, a: 1.0 }));
+                            } else {
+                                drawing.primitives.push(Primitive::DrawRect(rect, Color::black()));
+                            }
+                            hovered
+                        }
+                    );
+                }
+            }
+        }
+    }
+}
+
+impl<'a, T:'a> Widget for Menu<'a, T> {
+    type Result = Option<&'a T>;
+
+    fn result(&self, _id: dag::Id) -> Self::Result {
+        self.result
     }
 }
 
@@ -90,6 +206,7 @@ fn for_each_item<
     for item in slice {
         let (item, height, recursive) = match item {
             &MenuItem::Separator => {
+                i += 1;
                 y += 8.0;
                 continue;
             },
@@ -153,154 +270,4 @@ fn for_each_item<
     }
 
     time
-}
-
-impl<'a, T: 'a> Widget for Menu<'a, T> {
-    type Result = Option<&'a T>;
-    type State = MenuState;
-
-    fn tabstop() -> bool { 
-        false 
-    }
-
-    fn enabled(&self, _state: &Self::State) -> bool {
-        true
-    }
-
-    fn measure(
-        &self, 
-        _: &Self::State,
-        _: Option<Rect>
-    ) -> Option<Rect> {
-        Some(Rect::from_wh(0.0, 0.0))
-    }
-
-    fn event(
-        &mut self, 
-        state: &mut Self::State, 
-        _: Rect, 
-        cursor: MousePosition, 
-        event: Event,
-        _: bool
-    ) -> Capture {
-        let mut capture = Capture::None;
-
-        *state = match replace(state, MenuState::default()) {
-            MenuState::Idle => {
-                if let Event::Press(Key::RightMouseButton, _) = event {
-                    capture = Capture::CaptureFocus(MouseStyle::ArrowClicking);
-                    MenuState::Hover(cursor.x, cursor.y, MenuPath::new(), Instant::now())
-                } else {
-                    MenuState::Idle
-                }
-            },
-            MenuState::Hover(x, y, path, time)  => {
-                capture = Capture::CaptureFocus(MouseStyle::Arrow);
-
-                let mut cursor_outside = true;
-                for_each_item(
-                    self.menu, 
-                    0, (x, y), 
-                    BorrowMenuPath{ x: &path }, 
-                    time,
-                    |rect, item, hovered, _| {
-                        if cursor.inside(&rect) {
-                            cursor_outside = false;
-                            match &event {
-                                &Event::Press(Key::LeftMouseButton, _) => {
-                                    self.result = Some(item);
-                                },
-                                &_ => (),
-                            }
-                        }
-                        hovered
-                    }
-                );
-
-                if self.result.is_some() {
-                    MenuState::Idle
-                } else if cursor_outside {
-                    match event {
-                        Event::Press(Key::LeftMouseButton, _) => {
-                            MenuState::Idle
-                        },
-                        Event::Press(Key::RightMouseButton, _) => {
-                            MenuState::Hover(cursor.x, cursor.y, MenuPath::new(), Instant::now())
-                        },
-                        _ => {
-                            MenuState::Hover(x, y, path, time)
-                        },
-                    }
-                } else {
-                    MenuState::Hover(x, y, path, time)
-                }
-            },
-        };
-
-        capture
-    }
-
-    fn hover(
-        &mut self, 
-        state: &mut Self::State, 
-        _: Rect, 
-        cursor: MousePosition
-    ) -> Hover {
-        *state = match replace(state, MenuState::default()) {
-            MenuState::Idle => MenuState::Idle,
-
-            MenuState::Hover(x, y, mut path, mut time) => {
-                time = for_each_item(
-                    self.menu, 
-                    0, (x, y), 
-                    BorrowMutMenuPath{ x: &mut path }, 
-                    time,
-                    |rect, _, _, _| {
-                        cursor.inside(&rect)
-                    }
-                );
-                MenuState::Hover(x, y, path, time)
-            },
-        };
-        Hover::HoverIdle
-    }
-
-    fn predraw<F: FnMut(Primitive)>(
-        &self, 
-        state: &Self::State,
-        _: Rect, 
-        mut submit: F
-    ) { 
-        match state {
-            &MenuState::Idle => (),
-            &MenuState::Hover(x, y, ref path, time) => {
-                for_each_item(
-                    self.menu, 
-                    0, (x, y), 
-                    BorrowMenuPath{ x: &path }, 
-                    time,
-                    |rect, _, hovered, _| {
-                        if hovered {
-                            submit(Primitive::DrawRect(rect, Color{ r: 0.0, g: 0.0, b: 1.0, a: 1.0 }));
-                        } else {
-                            submit(Primitive::DrawRect(rect, Color::black()));
-                        }
-                        hovered
-                    }
-                );
-            }
-        }
-    }
-
-    fn child_area(
-        &self, 
-        _: &Self::State,
-        _: Rect,
-    ) -> ChildArea {
-        ChildArea::Popup(Rect::from_wh(0.0, 0.0))
-    }
-
-    fn result(self, _: &Self::State) -> Option<&'a T> {
-        self.result
-    }
 }

@@ -1,6 +1,6 @@
-use super::*;
-use clipboard::{ClipboardContext,ClipboardProvider};
 use std::time::Instant;
+use clipboard::{ClipboardContext,ClipboardProvider};
+use super::*;
 
 #[derive(Clone,Copy,Debug,PartialEq)]
 pub enum InputState {
@@ -11,116 +11,85 @@ pub enum InputState {
 }
 
 pub struct Input<'a> {
-    pub patch: Patch,
-    pub size: Option<Rect>,
-    pub password: bool,
-    pub text_color: Color,
     buffer: &'a mut String,
-    text: Option<Text>,
-    focus: bool,
+    password: bool,
     submit: bool,
 }
 
 impl<'a> Input<'a> {
-    pub fn new(
-        patch: Patch,
-        text: &'a mut String, 
-        font: Font, 
-        text_size: f32, 
-        text_color: Color
-    ) -> Self {
-        let render_text = Text{ 
-            text: text.clone(), 
-            font: font, 
-            size: text_size, 
-            wrap: TextWrap::NoWrap 
-        };
-
-        Input {
-            patch,
-            size: None,
-            password: false,
-            text_color,
+    pub fn new(text: &'a mut String) -> Self {
+        Self {
             buffer: text,
-            text: Some(render_text),
-            focus: false,
+            password: false,
             submit: false,
         }
     }
 
-    pub fn size(mut self, size: Rect) -> Self {
-        self.size = Some(size);
-        self
-    }
-
-    pub fn text_color(mut self, text_color: Color) -> Self {
-        self.text_color = text_color;
-        self
-    }
-
-    pub fn take_focus(mut self) -> Self {
-        self.focus = true;
-        self
-    }
-
-    pub fn password(mut self) -> Self {
-        self.password = true;
-        self.text.as_mut().unwrap().text = text_display(self.buffer, self.password);
-        self
+    pub fn password(text: &'a mut String) -> Self {
+        Self {
+            buffer: text,
+            password: true,
+            submit: false,
+        }
     }
 }
 
-fn text_display(buffer: &String, password: bool) -> String {
-    if password {
-        "\u{25cf}".repeat(buffer.chars().count())
-    } else {
-        buffer.clone()
-    }
-}
+impl<'a> WidgetBase for Input<'a> {
+    fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style) {
+        let text = Text {
+            text: self.buffer.clone(),
+            size: 16.0,
+            wrap: TextWrap::NoWrap,
+            font: style.font.clone(),
+        };
 
-fn codepoint(s: &String, char_index: usize) -> usize {
-    s.char_indices().skip(char_index).next().map_or(s.len(), |(i,_)| i)
-}
+        let layout = Layout {
+            current: Some(Rect::from_wh(128.0, 32.0)),
+            margin: Rect { left: 5.0, right: 5.0, top: 5.0, bottom: 5.0 },
+            padding: Rect { left: 4.0, right: 4.0, top: 4.0, bottom: 4.0 },
+            constrain_width: Constraint::Fill,
+            constrain_height: Constraint::Fixed,
+        };
 
-impl WidgetState for InputState { }
-
-impl Default for InputState {
-    fn default() -> Self {
-        InputState::Idle(0.0, 0.0)
-    }
-}
-
-impl<'a> Widget for Input<'a> {
-    type Result = bool;
-    type State = InputState;
-
-    fn tabstop() -> bool {
-        true
-    }
-
-    fn autofocus(&self) -> bool {
-        self.focus
+        world.create_component(id, InputState::Idle(0.0, 0.0));
+        world.create_component(id, layout);
+        world.create_component(id, text);
+        world.create_component(id, Drawing{ primitives: vec![] });
+        world.create_component(id, Clipper{ rect: Rect::from_wh(0.0, 0.0), intersect: true });
+        world.create_component(id, WidgetBackground {
+            normal: Background::Patch(style.input.clone(), 1.0),
+            hover: Background::Patch(style.input.clone(), 1.0),
+            click: Background::Patch(style.input.clone(), 1.0),
+        });
     }
 
-    fn measure(&self, _state: &Self::State, _layout: Option<Rect>) -> Option<Rect> {
-        self.size
+    fn update(&mut self, _id: dag::Id, _world: &Ui, _style: &Style, _window: Viewport) -> Viewport {
+        Viewport {
+            child_rect: Rect::from_wh(0.0, 0.0),
+            input_rect: None,
+        }
     }
 
-    fn event(
-        &mut self, 
-        state: &mut Self::State, 
-        layout: Rect, 
-        cursor: MousePosition,
-        event: Event,
-        is_focused: bool
-    ) -> Capture {
-        let mut capture = Capture::None;
+    fn event(&mut self, id: dag::Id, world: &Ui, style: &Style, context: &mut EventSystemContext) {
+        let mut layout = world.component::<Layout>(id).unwrap();
+        let mut layout = layout.borrow_mut();
 
-        let content = self.patch.content_rect(layout);
+        let current = layout.current.unwrap();
+        let content = style.input.content_rect(current);
 
-        let text = self.text.as_mut().unwrap();
+        let mut text = world.component::<Text>(id).unwrap();
+        let mut text = text.borrow_mut();
 
-        let relative_cursor = (cursor.x - content.left, cursor.y - content.top);
+        let mut state = world.component::<InputState>(id).unwrap();
+        let mut state = state.borrow_mut();
+
+        let mut clipper = world.component::<Clipper>(id).unwrap();
+        clipper.borrow_mut().rect = content;
+
+        let mut drawing = world.component::<Drawing>(id).unwrap();
+        let mut drawing = drawing.borrow_mut();
+
+        let relative_cursor = (context.cursor.x - content.left, context.cursor.y - content.top);
 
         // sanity check on the state
         *state = match *state {
@@ -145,43 +114,52 @@ impl<'a> Widget for Input<'a> {
             state => state,
         };
 
+        if context.cursor.inside(&current) {
+            context.style = MouseStyle::Text;
+        }
+
         // event related state update
         *state = match *state {
             InputState::Idle(sx, sy) => {
-                if is_focused {
+                if context.focused {
                     let count = self.buffer.chars().count();
                     InputState::Selected(count, count, Instant::now(), sx, sy)
+                } else if context.cursor.inside(&current) {
+                    InputState::Hovered(sx, sy)
                 } else {
                     InputState::Idle(sx, sy)
                 }
             },
             InputState::Hovered(sx, sy) => {
-                if let Event::Press(Key::LeftMouseButton, _) = event {
-                    capture = Capture::CaptureFocus(MouseStyle::Text);
+                if let Event::Press(Key::LeftMouseButton, _) = context.event {
+                    context.capture = Capture::CaptureFocus(MouseStyle::Text);
                     let hit = text.hitdetect(relative_cursor, content);
                     InputState::Selecting(hit, hit, Instant::now(), sx, sy)
-                } else {
+                } else if context.cursor.inside(&current) {
                     InputState::Hovered(sx, sy)
+                } else {
+                    InputState::Idle(sx, sy)
                 }
             },
             InputState::Selecting(from, to, since, sx, sy) => {
-                capture = Capture::CaptureFocus(MouseStyle::Text);
-                if let Event::Release(Key::LeftMouseButton, _) = event {
+                context.style = MouseStyle::Text;
+                context.capture = Capture::CaptureFocus(MouseStyle::Text);
+                if let Event::Release(Key::LeftMouseButton, _) = context.event {
                     InputState::Selected(from, to, since, sx, sy)
                 } else {
                     let relative_cursor = (relative_cursor.0 + sx, relative_cursor.1 + sy);
                     let hit = text.hitdetect(relative_cursor, content);
-                    if let Event::Idle = event {
+                    if let Event::Idle = context.event {
                         InputState::Selecting(from, hit, since, sx, sy)
                     } else {
                         InputState::Selecting(from, hit, Instant::now(), sx, sy)
                     }
                 }
             },
-            InputState::Selected(from, to, since, sx, sy) => match event {
+            InputState::Selected(from, to, since, sx, sy) => match context.event {
                 Event::Press(Key::LeftMouseButton, _) => {
-                    if cursor.inside(&layout) {
-                        capture = Capture::CaptureFocus(MouseStyle::Text);
+                    if context.cursor.inside(&current) {
+                        context.capture = Capture::CaptureFocus(MouseStyle::Text);
                         let relative_cursor = (relative_cursor.0 + sx, relative_cursor.1 + sy);
                         let hit = text.hitdetect(relative_cursor, content);
                         InputState::Selecting(hit, hit, Instant::now(), sx, sy)
@@ -371,10 +349,10 @@ impl<'a> Widget for Input<'a> {
         };
 
         // update scroll state for current text and caret position
-        match state {
+        match state.deref_mut() {
             &mut InputState::Selecting(_, pos, _, ref mut sx, ref mut sy) |
             &mut InputState::Selected(_, pos, _, ref mut sx, ref mut sy) => {
-                let content = self.patch.content_rect(layout);
+                let content = style.input.content_rect(layout.current.unwrap());
                 let (caret, range) = text.measure_range(pos, text.text.chars().count(), content);
 
                 if *sx + content.width() > range.0 + 2.0 {
@@ -396,42 +374,10 @@ impl<'a> Widget for Input<'a> {
             &mut _ => (),
         };
 
-        capture
-    }
-
-    fn hover(
-        &mut self, 
-        state: &mut Self::State, 
-        layout: Rect, 
-        cursor: MousePosition
-    ) -> Hover {
-        if cursor.inside(&layout) {
-            if let InputState::Idle(sx, sy) = *state {
-                *state = InputState::Hovered(sx, sy);
-            }
-            Hover::HoverActive(MouseStyle::Text)
-        } else {
-            if let InputState::Hovered(sx, sy) = *state {
-                *state = InputState::Idle(sx, sy);
-            }
-            Hover::NoHover
-        }
-    }
-
-    fn postdraw<F: FnMut(Primitive)>(&self, state: &Self::State, layout: Rect, mut submit: F) {
-        let white = Color{ r:1.0, g:1.0, b:1.0, a:1.0 };
-
-        submit(Primitive::Draw9(self.patch.clone(), layout, white));
-
-        let mut content = self.patch.content_rect(layout);
-
-        let text = self.text.clone().unwrap();
-
-        submit(Primitive::PushClip(content));
-
+        // update rendering
         let scroll;
-
-        match state {
+        drawing.primitives.clear();
+        match state.deref() {
             &InputState::Idle(sx, sy) => {
                 scroll = (sx, sy);
             },
@@ -444,7 +390,7 @@ impl<'a> Widget for Input<'a> {
                 scroll = (sx, sy);
 
                 if to != from {
-                    submit(Primitive::DrawRect(
+                    drawing.primitives.push(Primitive::DrawRect(
                         Rect {
                             left: content.left + (range.0).0,
                             right: content.left + (range.1).0,
@@ -462,7 +408,7 @@ impl<'a> Widget for Input<'a> {
                         range.0
                     };
 
-                    submit(Primitive::DrawRect(
+                    drawing.primitives.push(Primitive::DrawRect(
                         Rect {
                             left: content.left + caret.0,
                             right: content.left + caret.0 + 1.0,
@@ -475,15 +421,31 @@ impl<'a> Widget for Input<'a> {
             },
         }
 
-        content.left -= scroll.0;
-        content.top -= scroll.1;
-        
-        submit(Primitive::DrawText(text, content, self.text_color));
-
-        submit(Primitive::PopClip);
+        layout.padding = Rect {
+            top: content.top - current.top,
+            bottom: current.bottom - content.bottom,
+            left: content.left - current.left - scroll.0,
+            right: current.right - content.right - scroll.1,
+        };
     }
+}
 
-    fn result(self, _: &Self::State) -> Self::Result {
+impl<'a> Widget for Input<'a> {
+    type Result = bool;
+
+    fn result(&self, _id: dag::Id) -> Self::Result {
         self.submit
     }
+}
+
+fn text_display(buffer: &String, password: bool) -> String {
+    if password {
+        "\u{25cf}".repeat(buffer.chars().count())
+    } else {
+        buffer.clone()
+    }
+}
+
+fn codepoint(s: &String, char_index: usize) -> usize {
+    s.char_indices().skip(char_index).next().map_or(s.len(), |(i,_)| i)
 }

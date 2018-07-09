@@ -1,230 +1,119 @@
 use super::*;
-use super::events::*;
-use downcast::Any;
-use std::default::Default;
 
-mod flow;
-mod scroll;
-mod button;
-mod toggle;
-mod input;
-mod lable;
-mod menu;
-mod window;
+pub mod label;
+pub mod button;
+pub mod toggle;
+pub mod linear;
+pub mod scroll;
+pub mod input;
+pub mod window;
+pub mod menu;
 
-pub use self::flow::*;
-pub use self::scroll::*;
+pub use self::label::*;
 pub use self::button::*;
 pub use self::toggle::*;
+pub use self::linear::*;
+pub use self::scroll::*;
 pub use self::input::*;
-pub use self::lable::*;
-pub use self::menu::*;
 pub use self::window::*;
+pub use self::menu::*;
 
-#[derive(PartialEq)]
-pub enum StateType {
-    Focus,
-    Persistent
+#[derive(Clone)]
+pub struct Viewport {
+    pub child_rect: Rect,
+    pub input_rect: Option<Rect>,
 }
 
-pub trait WidgetState: Any { }
+pub trait WidgetBase {
+    fn tabstop(&self) -> bool { false }
+    fn enabled(&self, dag::Id, &Ui) -> bool { true }
+    fn autofocus(&self, dag::Id) -> bool { false }
 
-downcast!(WidgetState);
-
-#[derive(Clone,Copy,PartialEq,Debug)]
-pub enum GenericWidgetState { 
-    Hovered,
-    Clicked,
-    Idle,
+    fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style);
+    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, window: Viewport) -> Viewport;
+    fn event(&mut self, _id: dag::Id, _world: &Ui, _style: &Style, _context: &mut EventSystemContext) { }
 }
 
-#[derive(Clone,Copy,Debug)]
-pub struct MousePosition {
-    pub x: f32,
-    pub y: f32,
-    pub visibility: Option<Rect>
-}
-
-pub enum ChildArea {
-    ConfineContentAndInput(Rect),
-    OverflowContentConfineInput(Rect),
-    OverflowContentAndInput,
-    Popup(Rect),
-    None,
-}
-
-impl MousePosition {
-    pub fn inside(&self, layout: &Rect) -> bool {
-        self.visibility.map_or(false, |v| v.intersect(layout).map_or(false, |i| {
-            self.x >= i.left && 
-            self.x < i.right && 
-            self.y >= i.top && 
-            self.y < i.bottom
-        }))
-    }
-
-    pub fn sub(&self, layout: &Rect) -> MousePosition {
-        MousePosition {
-            x: self.x,
-            y: self.y,
-            visibility: self.visibility.and_then(|v| v.intersect(layout))
-        }
-    }
-
-    pub fn expand(&self, layout: &Rect) -> MousePosition {
-        MousePosition {
-            x: self.x,
-            y: self.y,
-            visibility: Some(layout.clone())
-        }
-    }
-}
-
-impl WidgetState for GenericWidgetState {  }
-
-impl WidgetState for () { }
-
-impl Default for GenericWidgetState {
-    fn default() -> Self {
-        GenericWidgetState::Idle
-    }
-}
-
-pub type WidgetMeasure<'a> = &'a mut FnMut(Option<Rect>)->Option<Rect>;
-
-#[allow(unused_variables)]
-pub trait Widget {
+pub trait Widget: WidgetBase {
     type Result;
-    type State: WidgetState + Clone + Default;
 
-    fn state_type() -> StateType { 
-        StateType::Focus 
-    }
-
-    fn tabstop() -> bool { 
-        false 
-    }
-
-    fn enabled(&self, _state: &Self::State) -> bool {
-        true
-    }
-
-    fn measure(
-        &self, 
-        state: &Self::State,
-        layout: Option<Rect>
-    ) -> Option<Rect> {
-        None
-    }
-
-    fn estimate(
-        &self, 
-        state: &Self::State, 
-        layout: Rect, 
-        child: WidgetMeasure
-    ) -> Rect {
-        layout
-    }
-
-    fn layout(
-        &mut self, 
-        state: &mut Self::State, 
-        layout: Rect, 
-        child: WidgetMeasure
-    ) -> Rect {
-        self.estimate(state, layout, child)
-    }
-
-    fn event(
-        &mut self, 
-        state: &mut Self::State, 
-        layout: Rect, 
-        cursor: MousePosition, 
-        event: Event,
-        is_focused: bool
-    ) -> Capture {
-        Capture::None
-    }
-
-    fn hover(
-        &mut self, 
-        state: &mut Self::State, 
-        layout: Rect, 
-        cursor: MousePosition
-    ) -> Hover {
-        Hover::NoHover
-    }
-
-    fn predraw<F: FnMut(Primitive)>(
-        &self, 
-        state: &Self::State,
-        layout: Rect, 
-        submit: F) { 
-    }
-
-    fn postdraw<F: FnMut(Primitive)>(
-        &self, 
-        state: &Self::State, 
-        layout: Rect, 
-        submit: F) { 
-    }
-
-    fn child_area(
-        &self, 
-        state: &Self::State,
-        layout: Rect,
-    ) -> ChildArea {
-        ChildArea::None
-    }
-
-    fn autofocus(&self) -> bool {
-        false
-    }
-    
-    fn result(self, &Self::State) -> Self::Result;
+    fn result(&self, id: dag::Id) -> Self::Result;
 }
 
-pub trait Layout {
-    fn estimate(&self, child: WidgetMeasure) -> Rect;
-    fn layout(&mut self, child: WidgetMeasure) -> Rect;
+pub struct Style {
+    pub font: Font,
+
+    pub button_normal: Patch,
+    pub button_hover: Patch,
+    pub button_pressed: Patch,
+
+    pub input: Patch,
+
+    pub checkbox_checked_normal: Image,
+    pub checkbox_checked_hover: Image,
+    pub checkbox_checked_pressed: Image,
+    pub checkbox_normal: Image,
+    pub checkbox_hover: Image,
+    pub checkbox_pressed: Image,
+
+    pub radio_checked_normal: Image,
+    pub radio_checked_hover: Image,
+    pub radio_checked_pressed: Image,
+    pub radio_normal: Image,
+    pub radio_hover: Image,
+    pub radio_pressed: Image,
+
+    pub scroll_horizontal: (Patch, Patch),
+    pub scroll_vertical: (Patch, Patch),
+
+    pub window: Patch,
 }
 
-pub struct LayoutCell<'a, W: Widget+'a> {
-    widget: &'a mut W,
-    state: &'a mut W::State,
-    layout: Rect,
-}
-
-pub struct LayoutRoot {
-    pub viewport: Rect,
-}
-
-impl<'a, W: Widget> LayoutCell<'a, W> {
-    pub fn new(widget: &'a mut W, state: &'a mut W::State, layout: Rect) -> LayoutCell<'a, W> {
-        LayoutCell {
-            widget,
-            state,
-            layout,
+impl Style {
+    pub fn default(ui: &mut Ui) -> Self {
+        Self {
+            button_normal: 
+                ui.get_patch(load_from_static_memory!("../../img/button_normal.png")),
+            button_hover: 
+                ui.get_patch(load_from_static_memory!("../../img/button_hover.png")),
+            button_pressed: 
+                ui.get_patch(load_from_static_memory!("../../img/button_pressed.png")),
+            checkbox_normal: 
+                ui.get_image(load_from_static_memory!("../../img/checkbox_normal.png")),
+            checkbox_hover: 
+                ui.get_image(load_from_static_memory!("../../img/checkbox_hover.png")),
+            checkbox_pressed: 
+                ui.get_image(load_from_static_memory!("../../img/checkbox_pressed.png")),
+            checkbox_checked_normal: 
+                ui.get_image(load_from_static_memory!("../../img/checkbox_checked_normal.png")),
+            checkbox_checked_hover: 
+                ui.get_image(load_from_static_memory!("../../img/checkbox_checked_hover.png")),
+            checkbox_checked_pressed: 
+                ui.get_image(load_from_static_memory!("../../img/checkbox_checked_pressed.png")),
+            radio_normal: 
+                ui.get_image(load_from_static_memory!("../../img/radio_normal.png")),
+            radio_hover: 
+                ui.get_image(load_from_static_memory!("../../img/radio_hover.png")),
+            radio_pressed: 
+                ui.get_image(load_from_static_memory!("../../img/radio_pressed.png")),
+            radio_checked_normal: 
+                ui.get_image(load_from_static_memory!("../../img/radio_checked_normal.png")),
+            radio_checked_hover: 
+                ui.get_image(load_from_static_memory!("../../img/radio_checked_hover.png")),
+            radio_checked_pressed: 
+                ui.get_image(load_from_static_memory!("../../img/radio_checked_pressed.png")),
+            input: 
+                ui.get_patch(load_from_static_memory!("../../img/input.png")),
+            font: 
+                ui.get_font(load_from_static_memory!("../../img/default_font.ttf")),
+            window: 
+                ui.get_patch(load_from_static_memory!("../../img/window.png")),
+            scroll_horizontal: 
+                (ui.get_patch(load_from_static_memory!("../../img/scroll_bg.png")),
+                 ui.get_patch(load_from_static_memory!("../../img/scroll_bar.png"))),
+            scroll_vertical: 
+                (ui.get_patch(load_from_static_memory!("../../img/scroll_bg.png")),
+                 ui.get_patch(load_from_static_memory!("../../img/scroll_bar.png"))),
         }
-    }
-}
-
-impl<'a, W: Widget> Layout for LayoutCell<'a, W> {
-    fn estimate(&self, child: WidgetMeasure) -> Rect {
-        self.widget.estimate(self.state, self.layout, child)
-    }
-    fn layout(&mut self, child: WidgetMeasure) -> Rect {
-        self.widget.layout(self.state, self.layout, child)
-    }
-}
-
-impl Layout for LayoutRoot {
-    fn estimate(&self, child: WidgetMeasure) -> Rect {
-        child(Some(self.viewport))
-            .unwrap_or(self.viewport).size()
-            .translate(self.viewport.left, self.viewport.top)
-    }
-    fn layout(&mut self, child: WidgetMeasure) -> Rect {
-        self.estimate(child)
     }
 }

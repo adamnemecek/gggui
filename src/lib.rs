@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate downcast;
 extern crate smallvec;
 extern crate rusttype;
@@ -12,19 +11,27 @@ extern crate clipboard;
 
 use std::mem::replace;
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::cell::Ref;
+use std::cell::RefMut;
+use std::ops::Deref;
+use std::ops::DerefMut;
+use std::any::Any;
+use std::any::TypeId;
 use smallvec::SmallVec;
 
 pub mod features;
-pub mod widgets;
 pub mod events;
 pub mod primitive;
 pub mod render;
 #[macro_use]
 pub mod loadable;
-pub mod style;
-
-pub mod ecsui;
-
+pub mod systems;
+pub mod components;
+pub mod widgets;
+pub mod dag;
+pub mod entry;
 mod cache;
 #[allow(dead_code)]
 mod qtree;
@@ -33,60 +40,143 @@ pub use self::widgets::*;
 pub use self::events::*;
 pub use self::primitive::*;
 pub use self::render::*;
-pub use self::style::*;
+pub use self::widgets::*;
+pub use self::components::*;
 use self::cache::Cache;
 use self::loadable::*;
-
-pub type EventVec = SmallVec<[Event; 4]>;
+use self::systems::*;
 
 pub type Font = (self::cache::Font, self::cache::FontId);
 
-struct Window {
-    drawlist: Vec<Primitive>,
-    rect: Rect,
+pub type EventVec = SmallVec<[Event; 4]>;
+
+#[derive(Clone,Copy,Debug)]
+pub struct MousePosition {
+    pub x: f32,
+    pub y: f32,
+    pub visibility: Option<Rect>
+}
+
+pub struct EventSystemContext {
+    pub capture: Capture,
+    pub event: Event,
+    pub focused: bool,
+    pub cursor: MousePosition,
+    pub style: MouseStyle,
+    pub mode: MouseMode,
+}
+
+impl MousePosition {
+    pub fn inside(&self, layout: &Rect) -> bool {
+        self.visibility.map_or(false, |v| v.intersect(layout).map_or(false, |i| {
+            self.x >= i.left && 
+            self.x < i.right && 
+            self.y >= i.top && 
+            self.y < i.bottom
+        }))
+    }
+
+    pub fn sub(&self, layout: &Rect) -> MousePosition {
+        MousePosition {
+            x: self.x,
+            y: self.y,
+            visibility: self.visibility.and_then(|v| v.intersect(layout))
+        }
+    }
+
+    pub fn expand(&self, layout: &Rect) -> MousePosition {
+        MousePosition {
+            x: self.x,
+            y: self.y,
+            visibility: Some(layout.clone())
+        }
+    }
+}
+
+struct UiWindow {
     id: String,
-    updated: bool,
+    tree: Option<dag::Tree>,
+    used: usize,
     modal: bool,
+    rect: Rect,
 }
 
 pub struct Ui {
-    focus: Option<(String, Box<WidgetState>)>,
-    last_tabstop_id: Option<String>,
-    focus_to_tabstop: Option<String>,
-    state: HashMap<String, Box<WidgetState>>,
-    cursor: (f32,f32),
-    previous_capture: Capture,
+    iteration: usize,
+    focus: Option<dag::Id>,
+    windows: Vec<UiWindow>,
+    tree_stack: Vec<dag::Tree>,
+    free: dag::FreeList,
+    containers: HashMap<TypeId, Box<Any>>,
+    sys_render: Vec<Box<SystemDispatch<Vec<Primitive>>>>,
+    sys_render_post: Vec<Box<SystemDispatch<Vec<Primitive>>>>,
+    sys_event: Vec<Box<SystemDispatch<EventSystemContext>>>,
+    events: EventVec,
     cache: Cache,
-    windows: Vec<Window>,
-    active_window: Option<Window>,
+    tabstop_last_id: Option<dag::Id>,
+    tabstop_focus_id: Option<dag::Id>,
+    viewport: Rect,
+    cursor: (f32, f32),
+    capture: Capture,
+    previous_capture: Capture,
+    mouse_style: MouseStyle,
+    mouse_mode: MouseMode,
 }
 
-pub struct UiContext<'a> {
-    ui: &'a mut Ui,
-    drawlist: Vec<Primitive>,
-    drawlist_sub: Vec<Primitive>,
-    parent: Box<Layout+'a>,
-    events: EventVec,
-    capture: Capture,
-    mouse_style: Option<MouseStyle>,
-    pub cursor: MousePosition,
-    visibility: Rect,
-    pub viewport: Rect,
-    enabled: bool,
+pub struct Context<'a> {
+    parent: &'a mut Ui,
+    style: &'a Style,
+    id: &'a str,
+    source: Option<String>,
+    widgets: Vec<(dag::Id, Box<'a + WidgetBase>)>,
+    window: Viewport,
+}
+
+pub struct WidgetResult<'a, T: 'a + Widget> {
+    pub result: T::Result,
+    pub context: Context<'a>,
 }
 
 impl Ui {
-    pub fn new() -> Ui {
-        Ui {
+    pub fn new() -> Self {
+
+        let (clip_push, clip_pop) = new_clip_system();
+
+        let sys_render: Vec<Box<SystemDispatch<Vec<Primitive>>>> = vec![
+            Box::new(BackgroundRenderSystem{}),
+            Box::new(clip_push),
+        ];
+
+        let sys_render_post: Vec<Box<SystemDispatch<Vec<Primitive>>>> = vec![
+            Box::new(TextRenderSystem{}),
+            Box::new(clip_pop),
+            Box::new(DrawingRenderSystem{}),
+        ];
+
+        let sys_event: Vec<Box<SystemDispatch<EventSystemContext>>> = vec![
+            Box::new(ClickableEventSystem{}),
+        ];
+
+        Self {
+            iteration: 1,
             focus: None,
-            last_tabstop_id: None,
-            focus_to_tabstop: None,
-            state: HashMap::new(),
-            cursor: (0.0, 0.0),
-            previous_capture: Capture::None,
+            windows: vec![],
+            tree_stack: vec![],
+            free: dag::FreeList::new(),
+            containers: HashMap::new(),
+            sys_render,
+            sys_render_post,
+            sys_event,
+            events: EventVec::new(),
             cache: Cache::new(2048),
-            windows: Vec::new(),
-            active_window: None,
+            tabstop_last_id: None,
+            tabstop_focus_id: None,
+            viewport: Rect::from_wh(0.0, 0.0),
+            cursor: (0.0, 0.0),
+            capture: Capture::None,
+            previous_capture: Capture::None,
+            mouse_style: MouseStyle::Arrow,
+            mouse_mode: MouseMode::Normal,
         }
     }
 
@@ -102,13 +192,7 @@ impl Ui {
         self.cache.get_font(load)
     }
 
-    pub fn reset_state(&mut self) {
-        self.focus = None;
-        self.state.clear();
-        self.previous_capture = Capture::None;
-    }
-
-    pub fn start<'a>(&'a mut self, mut events: Vec<Event>, viewport: Rect) -> UiContext<'a> {
+    pub fn update(&mut self, viewport: Rect, events: EventVec) {
         for event in events.iter() {
             match event {
                 &Event::Cursor(x, y) => self.cursor = (x, y),
@@ -116,481 +200,314 @@ impl Ui {
             }
         }
 
-        if events.len() == 0 {
-            events.push(Event::Idle);
+        self.viewport = viewport;
+
+        self.events = events;
+
+        self.capture = Capture::None;
+
+        if self.events.len() > 0 {
+            self.mouse_style = MouseStyle::Arrow;
+        }
+    }
+
+    pub fn window<'a>(&'a mut self, style: &'a Style, id: &'a str, modal: bool) -> Context<'a> {
+        let mut tree = None;
+        
+        // find window
+        for win in self.windows.iter_mut() {
+            if win.id == id {
+                assert!(win.tree.is_some());
+                win.used = self.iteration;
+                tree = win.tree.take();
+                break;
+            }
         }
 
-        let cursor = MousePosition{ 
-            x: self.cursor.0, 
-            y: self.cursor.1, 
-            visibility: Some(viewport) 
+        // window not found? make a new one
+        if tree.is_none() {
+            self.windows.push(UiWindow {
+                id: id.to_string(),
+                tree: None,
+                used: self.iteration,
+                modal,
+                rect: Rect::zero(),
+            });
+            tree = Some(dag::Tree::new());
+        }
+
+        self.tree_stack.push(tree.unwrap());
+
+        let viewport = Viewport {
+                child_rect: self.viewport,
+                input_rect: Some(self.viewport),
+            };
+
+        Context {
+            parent: self,
+            style,
+            id,
+            source: None,
+            widgets: vec![],
+            window: viewport,
+        }
+    }
+
+    pub fn render(&mut self) -> (DrawList, MouseStyle, MouseMode) {
+        let mut drawlists = vec![];
+
+        let mut windows = replace(&mut self.windows, vec![]);
+
+        for win in windows.iter_mut() {
+            let tree = win.tree.as_mut().unwrap();
+            tree.cleanup(self.iteration, &mut self.free);
+            if win.used >= self.iteration {
+                drawlists.push(self.run_systems(tree));
+            }
+        }
+
+        windows.retain(|win| win.used >= self.iteration);
+
+        self.windows = windows;
+
+        self.iteration += 1;
+
+        let drawlist = self.render_internal(drawlists);
+
+        (drawlist, self.mouse_style, self.mouse_mode)
+    }
+
+    pub fn children(&self) -> impl Iterator<Item=&dag::Id> {
+        let top = self.tree_stack.len() - 1;
+        self.tree_stack[top].ord.iter()
+    }
+
+    pub fn create_component<T: 'static + Clone>(&mut self, (id, gen): dag::Id, value: T) {
+        let container: &mut _ = self.containers
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| Box::new(Container::<T>::new(RefCell::new(Vec::<(Option<T>, usize)>::new()))))
+            .downcast_mut::<Container<T>>()
+            .unwrap();
+
+        container.borrow_mut().resize(self.free.len(), (None, 0));
+        container.borrow_mut()[id] = (Some(value), gen);
+    }
+
+    pub fn component<T: 'static + Clone>(&self, (id, gen): dag::Id) -> Option<FetchComponent<T>> {
+        self.containers
+            .get(&TypeId::of::<T>())
+            .and_then(|x| x.downcast_ref::<Container<T>>())
+            .and_then(|container| {
+                if id < container.borrow().len() && container.borrow()[id].1 == gen {
+                    Some(FetchComponent::new(container.clone(), id))
+                } else {
+                    None
+                }
+            })
+    }    
+}
+
+impl<'a> Context<'a> {
+    // Add a widget to the context. 
+    // The specified id should be unique within this context, it is used to find it's state in
+    //  future iterations.
+    // If the widget has children, you must add them through the context in the returned WidgetResult
+    pub fn add<'b, T: 'a + Widget>(&'b mut self, id: &str, mut w: T) -> WidgetResult<'b, T> {
+        let (internal_id, create, tree) = {
+            let top = self.parent.tree_stack.len()-1;
+            let iteration = self.parent.iteration;
+            let tree = &mut self.parent.tree_stack[top];
+            let free = &mut self.parent.free;
+            let internal_id = tree.id(id, free);
+
+            tree.ord.push(internal_id);
+            let item = tree.item(id, free);
+
+            (internal_id, 0 == replace(&mut item.used, iteration), item.subs.take().unwrap_or(dag::Tree::new()))
         };
 
-        let mut enabled = self.active_window.is_none();
-
-        // set all windows to not-updated so they can be garbage collected
-        // after the next loop (if not updated again)
-        for window in self.windows.iter_mut() {
-            window.updated = false;
-            enabled &= !cursor.inside(&window.rect);
-        }
-        for window in self.active_window.iter_mut() { 
-            window.updated = false;
-            enabled &= !cursor.inside(&window.rect);
+        if create {
+            w.create(internal_id, self.parent, self.style);
         }
 
-        UiContext { 
-            ui: self,
-            drawlist: Vec::new(),
-            drawlist_sub: Vec::new(),
-            parent: Box::new(LayoutRoot{ viewport }),
-            events: EventVec::from_vec(events),
-            capture: Capture::None,
-            mouse_style: None,
-            cursor: cursor,
-            visibility: viewport,
-            viewport: viewport,
-            enabled: enabled,
+        //tree.ord.clear();
+
+        self.parent.tree_stack.push(tree);
+
+        let sub_window = w.update(internal_id, self.parent, self.style, self.window.clone());
+
+        let result = w.result(internal_id);
+
+        self.widgets.push((internal_id, Box::new(w)));        
+
+        WidgetResult {
+            result,
+            context: Context {
+                parent: self.parent,
+                style: self.style,
+                id: self.id,
+                source: Some(id.to_string()),
+                widgets: vec![],
+                window: sub_window,
+            }
         }
     }
 
-    fn get_state<'a, W: Widget>(&'a mut self, w_id: &str) -> W::State {
-        if w_id != "" {
-            match W::state_type() {
-                StateType::Focus => 
-                    match &self.focus {
-                        &Some((ref id, ref state)) => {
-                            if w_id == id {
-                                state.downcast_ref::<W::State>().unwrap().clone()
-                            } else {
-                                W::State::default()
+    pub fn set_style(&mut self, style: &'a Style) {
+        self.style = style;
+    }
+
+    pub fn with<'b, F: FnOnce(&'b mut Context<'a>)>(&'b mut self, f: F) {
+        f(self);
+    }
+}
+
+// When the context is dropped, events and rendering will be evaluated and the results will be 
+//  posted to the parent context.
+impl<'a> Drop for Context<'a> {
+    fn drop(&mut self) {
+        let mut widgets = replace(&mut self.widgets, vec![]);
+
+        let mut tree = self.parent.tree_stack.pop().unwrap();
+
+        let mut activate_window = false;
+
+        tree.ord.clear();
+
+        for &(id, _) in widgets.iter() {
+            tree.ord.push(id);
+        }
+
+        for event in self.parent.events.clone() {
+            for &mut(id, ref mut widget) in widgets.iter_mut() {
+                let focused = self.parent.focus.map(|f| f == id).unwrap_or(false);
+
+                if focused || self.parent.capture == Capture::None {
+                    let mut ctx = EventSystemContext {
+                        capture: Capture::None,
+                        event,
+                        cursor: MousePosition { 
+                            x: self.parent.cursor.0, 
+                            y: self.parent.cursor.1, 
+                            visibility: self.window.input_rect 
+                        },
+                        style: self.parent.mouse_style,
+                        mode: self.parent.mouse_mode,
+                        focused,
+                    };
+
+                    widget.event(id, self.parent, self.style, &mut ctx);
+
+                    for sys in self.parent.sys_event.iter() {
+                        sys.run_for(&mut ctx, id, self.parent).ok();
+                    }
+
+                    self.parent.mouse_style = ctx.style;
+                    self.parent.mouse_mode = ctx.mode;
+
+                    match ctx.capture {
+                        Capture::CaptureFocus(mouse_style) => {
+                            self.parent.capture = Capture::CaptureFocus(mouse_style);
+                            self.parent.focus = Some(id);
+                            activate_window = true;
+                        },
+                        Capture::CaptureMouse(mouse_style) => {
+                            self.parent.capture = Capture::CaptureMouse(mouse_style);
+                            self.parent.focus = Some(id);
+                            activate_window = true;
+                        },
+                        _ => if focused {
+                            match event {
+                                Event::Press(Key::Tab, Modifiers{ shift: false, .. }) => {
+                                    self.parent.capture = Capture::FocusNext;
+                                },
+                                Event::Press(Key::Tab, Modifiers{ shift: true, .. }) => {
+                                    self.parent.capture = Capture::FocusPrev;
+                                    self.parent.tabstop_focus_id = self.parent.tabstop_last_id;
+                                },
+                                _ => (),
                             }
                         },
-                        &None => W::State::default(),
-                    },
-                StateType::Persistent => self.state
-                    .entry(w_id.to_string())
-                    .or_insert(Box::new(W::State::default()))
-                    .downcast_ref::<W::State>()
-                    .unwrap()
-                    .clone(),
+                    }
+                }
+            }
+        }
+
+        // if the window is activated, move it to the back of the window vec
+        if activate_window {
+            let mut i = self.parent.windows.len() - 1;
+            loop {
+                if self.parent.windows[i].id == self.id {
+                    let w = self.parent.windows.remove(i);
+                    self.parent.windows.push(w);
+                    break;
+                }
+
+                assert!(i > 0);
+                i -= 1;
+            }
+        }
+
+        if self.source.is_some() {
+            let top = self.parent.tree_stack.len()-1;
+            let src = self.source.as_ref().unwrap();
+            if tree.ids.len() > 0 {
+                self.parent.tree_stack[top].ids.get_mut(src).unwrap().subs = Some(tree);
             }
         } else {
-            W::State::default()
-        }
-    }
+            assert!(self.parent.tree_stack.len() == 0);
 
-    fn update_state<W: Widget>(&mut self, w_id: &str, new_state: W::State, is_focused: bool) {
-        if w_id != "" {
-            if W::tabstop() {
-                self.last_tabstop_id = Some(w_id.to_string());
+            let mut win_rect = None;
+            for (id, _) in widgets {
+                self.parent.component(id).map(|layout: FetchComponent<Layout>| {
+                    let layout = layout.borrow();
+                    win_rect = win_rect
+                        .and_then(|r| layout.current.map(|layout| layout.union(r)))
+                        .or(layout.current);
+                });
             }
 
-            match W::state_type() {
-                StateType::Focus => {
-                    if is_focused {
-                        self.focus = Some((w_id.to_string(), Box::new(new_state)));
-                    } else {
-                        match &mut self.focus {
-                            &mut Some((ref id, ref mut state)) => {
-                                if w_id == id {
-                                    *state.downcast_mut::<W::State>().unwrap() = new_state;
-                                }
-                            },
-                            _ => (),
-                        }
-                    }
-                },
-                StateType::Persistent => {
-                    if is_focused {
-                        self.focus = Some((w_id.to_string(), Box::new(new_state.clone())));
-                    }
-                    self.state.insert(w_id.to_string(), Box::new(new_state));
-                },
-            }
+            let id = self.id;
+            let win = self.parent.windows.iter_mut().rev().find(|win| win.id == id).unwrap();
+            win.tree = Some(tree);
+            win.rect = win_rect.unwrap();
         }
     }
 }
 
-impl<'a> UiContext<'a> {
-    fn sub<'b>(
-        &'b mut self, 
-        parent: Box<Layout+'b>, 
-        events: EventVec,
-        cursor: MousePosition,
-        visibility: Rect,
-        enabled: bool,
-        drawlist_sub: bool
-    ) -> UiContext<'b> {
-        let drawlist = if drawlist_sub {
-            replace(&mut self.drawlist_sub, Vec::new())
-        } else {
-            replace(&mut self.drawlist, Vec::new())
-        };
+impl Ui {
+    fn run_systems(&mut self, tree: &mut dag::Tree) -> Vec<Primitive> {
+        let mut system_context = vec![];
 
-        UiContext {
-            ui: self.ui,
-            drawlist: drawlist,
-            drawlist_sub: Vec::new(),
-            parent: parent,
-            events: events,
-            capture: self.capture,
-            mouse_style: None,
-            cursor: cursor,
-            visibility,
-            viewport: self.viewport,
-            enabled: enabled,
-        }
-    }
-
-    pub fn window<
-        F: FnOnce(&mut UiContext, Rect)
-    > (
-        &mut self,
-        id: &str,
-        properties: WindowProperties,
-        children: F
-    ) {
-        self.custom_window(
-            id, 
-            properties.default_size, 
-            properties.modal, 
-            properties.centered,
-            |ctx, win| {
-                ctx.nested(id, WindowController::new(properties, win), children);
+        for id in tree.ord.iter() {
+            for sys in self.sys_render.iter() {
+                sys.run_for(&mut system_context, *id, self).ok();
             }
-        );
-    }
 
-    pub fn custom_window<
-        F: FnOnce(&mut UiContext, &mut Rect)
-    > (
-        &mut self, 
-        id: &str, 
-        default_size: Rect, 
-        modal: bool, 
-        centered: bool,
-        children: F
-    ) {
-        let window_position = self.ui.windows.iter().position(|w| w.id == id);
-
-        let occluded = window_position.as_ref().map_or(true, |i| {
-            for j in (i+1)..self.ui.windows.len() {
-                if self.cursor.inside(&self.ui.windows[j].rect) {
-                    return true;
-                }
-            }
-            for w in self.ui.active_window.as_ref() {
-                if self.cursor.inside(&w.rect) {
-                    return true;
-                }
-            }
-            false
-        });
-
-        let enabled = self.ui.active_window.as_ref().map_or(!occluded, |w| w.id == id);
-
-        let (win, capture, mouse_style) = {
-            let mut size = self.ui.active_window.as_ref()
-                .and_then(|w| if w.id == id { Some(w.rect) } else { None })
-                .or_else(|| {
-                    let default_size = if centered {
-                        let xy = (
-                            (self.viewport.left+self.viewport.right-default_size.width()) * 0.5,
-                            (self.viewport.top+self.viewport.bottom-default_size.height()) * 0.5
-                        );
-                        default_size.size().translate(xy.0, xy.1)
-                    } else {
-                        default_size
-                    };
-                    window_position.as_ref()
-                        .and_then(|i| Some(self.ui.windows[*i].rect))
-                        .or(Some(default_size))
-                }).unwrap();
-
-            let mut sub = UiContext {
-                ui: self.ui,
-                drawlist: Vec::new(),
-                drawlist_sub: Vec::new(),
-                parent: Box::new(LayoutRoot{ viewport: size }),
-                events: self.events.clone(),
-                capture: Capture::None,
-                mouse_style: None,
-                cursor: self.cursor.expand(&size),
-                visibility: size,
-                viewport: self.viewport,
-                enabled: enabled
-            };
-
-            sub.drawlist.push(Primitive::PushClip(self.viewport));
-            children(&mut sub, &mut size);
-            sub.drawlist.append(&mut sub.drawlist_sub);
-            sub.drawlist.push(Primitive::PopClip);
-
-            (Window {
-                drawlist: sub.drawlist,
-                rect: size,
-                id: id.to_string(),
-                updated: true,
-                modal: modal,
-            }, sub.capture, sub.mouse_style)
-        };
-
-        if modal {
-            if !enabled {
-                self.ui.active_window.take().map(|w| {
-                    assert!(!w.modal);
-                    self.ui.windows.push(w)
-                });
-                self.ui.focus.take();
-            }
-            self.ui.active_window = Some(win);
-        } else if let Capture::CaptureFocus(_) = capture {
-            self.ui.active_window = Some(win);
-        } else {
-            if let Some(i) = window_position {
-                self.ui.windows[i] = win;
-            } else {
-                self.ui.windows.push(win);
-            }
-        }
-
-        if capture != Capture::None {
-            self.capture = capture;
-        }
-
-        if mouse_style.is_some() {
-            self.mouse_style = mouse_style;
-        }
-    }
-
-    pub fn simple<W: Widget>(&mut self, id: &str, widget: W) -> W::Result {
-        self.nested(id, widget, |_ui,_area|{ })
-    }
-
-    pub fn stateless<W: Widget>(&mut self, widget: W) -> W::Result {
-        self.nested("", widget, |_ui,_area|{ })
-    }
-
-    pub fn nested<W, F>(&mut self, id: &str, mut widget: W, children: F) -> W::Result 
-    where
-        W: Widget, 
-        F: FnOnce(&mut UiContext, Rect),
-    {
-        let mut state = self.ui.get_state::<W>(id);
-        let mut is_focused = self.ui.focus.as_ref().map_or(false, |f| f.0 == id);
-
-        let enabled = self.enabled && widget.enabled(&state);
-
-        //--------------------------------------------------------------------------------------//
-        // handle layouting
-        let has_dynamic_size = match widget.child_area(&state, Rect::from_wh(0.0, 0.0)) {
-            ChildArea::ConfineContentAndInput(_) |
-            ChildArea::None => {
-                false
-            },
-            _ => true,
-        };
-
-        let mut cached_measurement = None;
-
-        let layout = self.parent.estimate(&mut |layout| {
-            cached_measurement = Some(widget.measure(&state, layout));
-            cached_measurement.clone().unwrap()
-        });
-
-        if !has_dynamic_size && layout.intersect(&self.visibility).is_none() {
-            self.parent.layout(&mut |_| {
-                cached_measurement.clone().unwrap()
-            });
-            return widget.result(&state);
-        }
-
-        //--------------------------------------------------------------------------------------//
-        // handle tabstops
-        if W::tabstop() && id != "" && enabled {
-            if self.ui.focus.is_none() && widget.autofocus() { 
-                is_focused = true;
-                self.capture = Capture::CaptureFocus(MouseStyle::Arrow);
-            }
-            if self.capture == Capture::FocusNext && 
-                self.ui.focus_to_tabstop.is_none() {
-                self.ui.focus_to_tabstop = Some(id.to_string());
-            }
-            if self.ui.previous_capture == Capture::FocusNext && 
-                self.ui.focus_to_tabstop.is_none() {
-                self.ui.focus_to_tabstop = Some(id.to_string());
-            }
-            if (self.ui.previous_capture == Capture::FocusPrev ||
-                self.ui.previous_capture == Capture::FocusNext) &&
-                self.ui.focus_to_tabstop.as_ref().map_or(false, |t| t == id) {
-                self.ui.focus_to_tabstop = None;
-                self.ui.previous_capture = Capture::None;
-                is_focused = true;
-                self.capture = Capture::CaptureFocus(MouseStyle::Arrow);
-            }
-        }
-
-        //--------------------------------------------------------------------------------------//
-        // hover for predraw + predraw
-        if enabled && (is_focused || self.ui.previous_capture == Capture::None) {
-            widget.hover(&mut state, layout, self.cursor);
-        }
-        if let ChildArea::Popup(_) = widget.child_area(&state, layout) {
-            widget.predraw(&state, layout, |p| self.drawlist_sub.push(p));
-        } else {
-            widget.predraw(&state, layout, |p| self.drawlist.push(p));
-        }
-
-        //--------------------------------------------------------------------------------------//
-        // handle children
-        let child_area = widget.child_area(&state, layout);
-        let (child_capture, child_mouse_style) = match &child_area {
-            &ChildArea::None => (Capture::None, None),
-            child_type => {
-                let layouter = LayoutCell::new(&mut widget, &mut state, layout);
-                let events = self.events.clone();
-                let (cursor, drawlist_sub, clip_vis) = match child_type {
-                    &ChildArea::ConfineContentAndInput(ref clip) => 
-                        (self.cursor.sub(clip), false, true),
-                    &ChildArea::OverflowContentConfineInput(ref clip) => 
-                        (self.cursor.sub(clip), false, false),
-                    &ChildArea::OverflowContentAndInput =>
-                        (self.cursor, false, false),
-                    &ChildArea::Popup(ref clip) => 
-                        (self.cursor.expand(clip), true, true),
-                    _ => unreachable!(),
-                };
-
-                cursor.visibility.map_or((Capture::None, None), |vis| {
-                    let (capture, mouse_style, new_drawlist) = {
-                        let content_vis = if clip_vis { vis } else { self.visibility };
-                        let mut sub = self.sub(
-                            Box::new(layouter), 
-                            events, 
-                            cursor,
-                            content_vis,
-                            enabled,
-                            drawlist_sub
-                        );
-                        
-                        if clip_vis {    
-                            sub.drawlist.push(Primitive::PushClip(vis));
-                            children(&mut sub, vis);
-                            sub.drawlist.append(&mut sub.drawlist_sub);
-                            sub.drawlist.push(Primitive::PopClip);
-                        } else {
-                            children(&mut sub, vis);
-                            sub.drawlist.append(&mut sub.drawlist_sub);
-                        }
-
-                        (sub.capture, sub.mouse_style, sub.drawlist)
-                    };
-
-                    if drawlist_sub {
-                        replace(&mut self.drawlist_sub, new_drawlist);
-                    } else {
-                        replace(&mut self.drawlist, new_drawlist);
-                    }
-
-                    (capture, mouse_style)
-                })
-            },
-        };
-
-        //--------------------------------------------------------------------------------------//
-        // handle events
-        if child_capture == Capture::None && enabled {
-            let hover = if is_focused || self.ui.previous_capture == Capture::None {
-                widget.hover(&mut state, layout, self.cursor)
-            } else {
-                Hover::NoHover
-            };
-
-            let is_hovered = match hover {
-                Hover::NoHover => false,
-                Hover::HoverActive(mouse_style) => {
-                    self.mouse_style = Some(mouse_style);
-                    true
-                },
-                Hover::HoverIdle => true,
-            };
-
-            if is_hovered || is_focused {
-                for event in self.events.iter() {
-                    match widget.event(&mut state, layout, self.cursor, event.clone(), is_focused) {
-                        Capture::CaptureFocus(mouse_style) => {
-                            if id != "" {
-                                self.capture = Capture::CaptureFocus(mouse_style);
-                                is_focused = true;
-                            }
-                        },
-                        Capture::CaptureMouse(mouse_style) => {
-                            if id != "" {
-                                self.capture = Capture::CaptureMouse(mouse_style);
-                                is_focused = true;
-                            }
-                        },
-                        _ => if is_focused {
-                            match event {
-                                &Event::Press(Key::Tab, Modifiers{ shift: false, .. }) => {
-                                    self.capture = Capture::FocusNext;
-                                },
-                                &Event::Press(Key::Tab, Modifiers{ shift: true, .. }) => {
-                                    self.capture = Capture::FocusPrev;
-                                    self.ui.focus_to_tabstop = self.ui.last_tabstop_id.clone();
-                                },
-                                &_ => (),
-                            }
-                        },
-                    }
+            for val in tree.ids.values_mut() {
+                if val.id == *id {
+                    val.subs.as_mut().map(|x| {
+                        system_context.append(&mut self.run_systems(x));
+                    });
                 }
             }
 
-            self.ui.update_state::<W>(id, state.clone(), is_focused);
-        } else {
-            self.capture = child_capture;
-            self.ui.update_state::<W>(id, state.clone(), false);
-        }
-
-        if child_mouse_style.is_some() {
-            self.mouse_style = child_mouse_style;
-        }
-
-        if let ChildArea::Popup(_) = widget.child_area(&state, layout) {
-            widget.postdraw(&state, layout, |p| self.drawlist_sub.push(p));
-        } else {
-            widget.postdraw(&state, layout, |p| self.drawlist.push(p));
-        }
-        if W::tabstop() && is_focused && enabled {
-            self.drawlist.push(Primitive::DrawRect(layout, Color::white().with_alpha(0.16)));
-        }
-
-        // apply final layout. Parent will measure this widget again but now
-        //  we know how much content there is including children
-        self.parent.layout(&mut |layout| {
-            if has_dynamic_size {
-                widget.measure(&state, layout)
-            } else {
-                cached_measurement.clone().unwrap()
+            for sys in self.sys_render_post.iter() {
+                sys.run_for(&mut system_context, *id, self).ok();
             }
-        });
+        }
 
-        widget.result(&state)
+        system_context
     }
 
-    pub fn finish(self) -> (DrawList, MouseStyle, MouseMode) {
-        self.ui.previous_capture = self.capture;
-        self.ui.windows.retain(|w| w.updated);
-        if let Some(&Window{ updated: false, .. }) = self.ui.active_window.as_ref() {
-            self.ui.active_window = None;
-        }
-
+    fn render_internal(&mut self, draw_lists: Vec<Vec<Primitive>>) -> DrawList {
+        self.previous_capture = self.capture;
+       
         // drop focus if nothing was clicked
         if let Capture::None = self.capture {
             for event in self.events.iter() {
                 if let &Event::Press(Key::LeftMouseButton, _) = event {
-                    self.ui.focus = Some(("".to_string(), Box::new(())));
+                    self.focus = None;
                 }
             }
         }
@@ -602,14 +519,6 @@ impl<'a> UiContext<'a> {
         scissors.push(self.viewport);
 
         let mut current_command = Command::Nop;
-
-        let mut draw_lists = vec![self.drawlist];
-        for window in self.ui.windows.iter_mut() {
-            draw_lists.push(replace(&mut window.drawlist, vec![]));
-        }
-        for window in self.ui.active_window.iter_mut() {
-            draw_lists.push(replace(&mut window.drawlist, vec![]));
-        }
 
         let vp = self.viewport.clone();
         let validate_clip = |clip: Rect| {
@@ -696,7 +605,7 @@ impl<'a> UiContext<'a> {
                     let offset = vtx.len();
                     let vp = self.viewport;
 
-                    self.ui.cache.draw_text(  
+                    self.cache.draw_text(  
                         &text, 
                         rect,
                         |uv, pos| {
@@ -816,13 +725,16 @@ impl<'a> UiContext<'a> {
         let (mouse_style, mouse_mode) = match self.capture {
             Capture::CaptureFocus(style) => (style, MouseMode::Normal),
             Capture::CaptureMouse(style) => (style, MouseMode::Confined),
-            _ => (self.mouse_style.unwrap_or(MouseStyle::Arrow), MouseMode::Normal)
+            _ => (self.mouse_style, MouseMode::Normal)
         };
 
-        (DrawList {
-            updates: self.ui.cache.take_updates(),
+        self.mouse_style = mouse_style;
+        self.mouse_mode = mouse_mode;
+
+        DrawList {
+            updates: self.cache.take_updates(),
             vertices: vtx,
             commands: cmd
-        }, mouse_style, mouse_mode)
+        }
     }
 }

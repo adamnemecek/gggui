@@ -1,5 +1,4 @@
 use super::*;
-use ecsui::components::Clickable;
 
 pub struct ClickableEventSystem { }
 
