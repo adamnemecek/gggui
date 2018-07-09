@@ -155,6 +155,15 @@ impl Rect {
             bottom: self.bottom - padding.bottom,
         }
     }
+
+    pub fn union(self, other: Rect) -> Rect {
+        Rect {
+            left: self.left.min(other.left),
+            right: self.right.max(other.right),
+            top: self.top.min(other.top),
+            bottom: self.bottom.max(other.bottom),
+        }
+    }
 }
 
 impl Into<Rect> for [f32;4] {

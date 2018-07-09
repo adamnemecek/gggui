@@ -72,17 +72,18 @@ impl MousePosition {
     }
 }
 
-struct Window {
+struct UiWindow {
     id: String,
     tree: Option<dag::Tree>,
     used: usize,
     modal: bool,
+    rect: Rect,
 }
 
 pub struct Ui {
     iteration: usize,
     focus: Option<dag::Id>,
-    windows: Vec<Window>,
+    windows: Vec<UiWindow>,
     tree_stack: Vec<dag::Tree>,
     free: dag::FreeList,
     containers: HashMap<TypeId, Box<Any>>,
@@ -184,7 +185,9 @@ impl Ui {
 
         self.capture = Capture::None;
 
-        self.mouse_style = MouseStyle::Arrow;
+        if self.events.len() > 0 {
+            self.mouse_style = MouseStyle::Arrow;
+        }
     }
 
     pub fn window<'a>(&'a mut self, style: &'a Style, id: &'a str, modal: bool) -> Context<'a> {
@@ -202,11 +205,12 @@ impl Ui {
 
         // window not found? make a new one
         if tree.is_none() {
-            self.windows.push(Window {
+            self.windows.push(UiWindow {
                 id: id.to_string(),
                 tree: None,
                 used: self.iteration,
                 modal,
+                rect: Rect::zero(),
             });
             tree = Some(dag::Tree::new());
         }
@@ -279,31 +283,7 @@ impl Ui {
                     None
                 }
             })
-    }
-
-    fn run_systems(&mut self, tree: &mut dag::Tree) -> Vec<Primitive> {
-        let mut system_context = vec![];
-
-        for id in tree.ord.iter() {
-            for sys in self.sys_render.iter() {
-                sys.run_for(&mut system_context, *id, self).ok();
-            }
-
-            for val in tree.ids.values_mut() {
-                if val.id == *id {
-                    val.subs.as_mut().map(|x| {
-                        system_context.append(&mut self.run_systems(x));
-                    });
-                }
-            }
-
-            for sys in self.sys_render_post.iter() {
-                sys.run_for(&mut system_context, *id, self).ok();
-            }
-        }
-
-        system_context
-    }
+    }    
 }
 
 impl<'a> Context<'a> {
@@ -456,13 +436,49 @@ impl<'a> Drop for Context<'a> {
         } else {
             assert!(self.parent.tree_stack.len() == 0);
 
+            let mut win_rect = None;
+            for (id, _) in widgets {
+                self.parent.component(id).map(|layout: FetchComponent<Layout>| {
+                    let layout = layout.borrow();
+                    win_rect = win_rect
+                        .and_then(|r| layout.current.map(|layout| layout.union(r)))
+                        .or(layout.current);
+                });
+            }
+
             let id = self.id;
-            self.parent.windows.iter_mut().rev().find(|win| win.id == id).unwrap().tree = Some(tree);
+            let win = self.parent.windows.iter_mut().rev().find(|win| win.id == id).unwrap();
+            win.tree = Some(tree);
+            win.rect = win_rect.unwrap();
         }
     }
 }
 
 impl Ui {
+    fn run_systems(&mut self, tree: &mut dag::Tree) -> Vec<Primitive> {
+        let mut system_context = vec![];
+
+        for id in tree.ord.iter() {
+            for sys in self.sys_render.iter() {
+                sys.run_for(&mut system_context, *id, self).ok();
+            }
+
+            for val in tree.ids.values_mut() {
+                if val.id == *id {
+                    val.subs.as_mut().map(|x| {
+                        system_context.append(&mut self.run_systems(x));
+                    });
+                }
+            }
+
+            for sys in self.sys_render_post.iter() {
+                sys.run_for(&mut system_context, *id, self).ok();
+            }
+        }
+
+        system_context
+    }
+
     fn render_internal(&mut self, draw_lists: Vec<Vec<Primitive>>) -> DrawList {
         self.previous_capture = self.capture;
        
