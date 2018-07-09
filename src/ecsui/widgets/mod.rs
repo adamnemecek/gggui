@@ -7,6 +7,7 @@ pub mod linear;
 pub mod scroll;
 pub mod input;
 pub mod window;
+pub mod menu;
 
 pub use self::label::*;
 pub use self::button::*;
@@ -15,6 +16,7 @@ pub use self::linear::*;
 pub use self::scroll::*;
 pub use self::input::*;
 pub use self::window::*;
+pub use self::menu::*;
 
 #[derive(Clone)]
 pub struct Viewport {
