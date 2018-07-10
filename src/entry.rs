@@ -1,34 +1,31 @@
 use super::*;
 
 pub trait Entry {
-    fn eval<'a>(self: Box<Self>, context: &mut Context<'a>);
+    fn eval<'a>(&self, context: &mut Context<'a>);
 }
 
-impl<T: 'static + Widget> Entry for (&'static str, T) {
-    fn eval<'a>(self: Box<Self>, context: &mut Context<'a>) {
-        let x = *self;
-        context.add(x.0, x.1);
+impl<T: 'static + Widget + Clone> Entry for (&'static str, T) {
+    fn eval<'a>(&self, context: &mut Context<'a>) {
+        context.add(self.0, self.1.clone());
     }
 }
 
-impl<T: 'static + Widget, F: FnOnce(T::Result)> Entry for (&'static str, T, F) {
-    fn eval<'a>(self: Box<Self>, context: &mut Context<'a>) {
-        let x = *self;
-        x.2(context.add(x.0, x.1).result);
+impl<T: 'static + Widget + Clone, F: Fn(T::Result)> Entry for (&'static str, T, F) {
+    fn eval<'a>(&self, context: &mut Context<'a>) {
+        self.2(context.add(self.0, self.1.clone()).result);
     }
 }
 
 impl<'a> Context<'a> {
-    fn add_entries(&mut self, x: Vec<Box<Entry>>) {
+    fn add_entries(&mut self, x: &'a Vec<&'a Entry>) {
         for i in x {
             i.eval(self);
         }
     }
 }
 
-impl<T: 'static + Widget> Entry for (&'static str, T, Vec<Box<Entry>>) {
-    fn eval<'a>(self: Box<Self>, context: &mut Context<'a>) {
-        let x = *self;
-        context.add(x.0, x.1).context.add_entries(x.2);
+impl<'e, T: 'static + Widget + Clone> Entry for (&'static str, T, Vec<&'e Entry>) {
+    fn eval<'a>(&self, context: &mut Context<'a>) {
+        context.add(self.0, self.1.clone()).context.add_entries(&self.2);
     }
 }

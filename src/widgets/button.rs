@@ -39,8 +39,7 @@ impl WidgetBase for Button {
     }
 
     fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, _window: Viewport) -> Viewport {
-        let mut clickable = world.component::<Clickable>(id);
-        let clickable = clickable.as_mut().unwrap();
+        let mut clickable = world.component::<Clickable>(id).unwrap();
         let mut clickable = clickable.borrow_mut();
 
         *clickable = match *clickable {

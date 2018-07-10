@@ -42,8 +42,8 @@ pub use self::primitive::*;
 pub use self::render::*;
 pub use self::widgets::*;
 pub use self::components::*;
+pub use self::loadable::*;
 use self::cache::Cache;
-use self::loadable::*;
 use self::systems::*;
 
 pub type Font = (self::cache::Font, self::cache::FontId);
@@ -115,8 +115,8 @@ pub struct Ui {
     cache: Cache,
     tabstop_last_id: Option<dag::Id>,
     tabstop_focus_id: Option<dag::Id>,
-    viewport: Rect,
-    cursor: (f32, f32),
+    pub viewport: Rect,
+    pub cursor: (f32, f32),
     capture: Capture,
     previous_capture: Capture,
     mouse_style: MouseStyle,
