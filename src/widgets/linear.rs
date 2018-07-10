@@ -176,12 +176,32 @@ impl WidgetBase for LinearLayout {
             Constraint::Fill => window.bottom + layout.padding.bottom,
         };
 
-        let viewport = Viewport {
-            child_rect: layout.after_padding(),
-            input_rect: viewport.input_rect.and_then(|ir| ir.intersect(&layout.after_padding())),
+        let current = layout.current.as_ref().unwrap();
+        let child_rect = Rect {
+            left: match layout.constrain_width.clone() { 
+                Constraint::Fixed => current.left + layout.padding.left,
+                _ => window.left,
+            },
+            right: match layout.constrain_width.clone() { 
+                Constraint::Fixed => current.right - layout.padding.right,
+                _ => window.right,
+            },
+            top: match layout.constrain_height.clone() { 
+                Constraint::Fixed => current.top + layout.padding.top,
+                _ => window.top,
+            },
+            bottom: match layout.constrain_height.clone() { 
+                Constraint::Fixed => current.bottom - layout.padding.bottom,
+                _ => window.bottom,
+            },
         };
 
-        clipper.borrow_mut().rect = viewport.child_rect;
+        let viewport = Viewport {
+            child_rect,
+            input_rect: viewport.input_rect.and_then(|ir| ir.intersect(&child_rect)),
+        };
+
+        clipper.borrow_mut().rect = layout.after_padding();
 
         viewport
     }
@@ -190,5 +210,5 @@ impl WidgetBase for LinearLayout {
 impl Widget for LinearLayout {
     type Result = ();
 
-    fn result(&self, _id: dag::Id) -> Self::Result { }
+    fn result(&mut self, _id: dag::Id) -> Self::Result { }
 }

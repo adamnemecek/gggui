@@ -11,7 +11,7 @@ impl Button {
             layout: Layout{
                 margin: Rect{ left: 5.0, top: 5.0, right: 5.0, bottom: 5.0 },
                 padding: Rect{ left: 5.0, top: 5.0, right: 5.0, bottom: 5.0 },
-                current: Some(Rect::from_wh(256.0, 64.0)),
+                current: Some(Rect::from_wh(256.0, 32.0)),
                 constrain_width: Constraint::Fill,
                 constrain_height: Constraint::Fixed,
             },
@@ -74,7 +74,7 @@ impl WidgetBase for Button {
 impl Widget for Button {
     type Result = bool;
 
-    fn result(&self, _id: dag::Id) -> Self::Result {
+    fn result(&mut self, _id: dag::Id) -> Self::Result {
         self.clicked
     }
 }

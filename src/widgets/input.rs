@@ -433,7 +433,7 @@ impl<'a> WidgetBase for Input<'a> {
 impl<'a> Widget for Input<'a> {
     type Result = bool;
 
-    fn result(&self, _id: dag::Id) -> Self::Result {
+    fn result(&mut self, _id: dag::Id) -> Self::Result {
         self.submit
     }
 }

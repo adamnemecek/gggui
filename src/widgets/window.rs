@@ -210,7 +210,7 @@ impl WidgetBase for Window {
 impl Widget for Window {
     type Result = bool;
 
-    fn result(&self, _id: dag::Id) -> Self::Result { 
+    fn result(&mut self, _id: dag::Id) -> Self::Result { 
         self.open
     }
 }

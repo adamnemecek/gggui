@@ -327,5 +327,5 @@ fn handle_range(offset: f32, x: f32, length: f32, min: f32, max: f32) -> (f32, f
 impl Widget for Scroll {
     type Result = ();
 
-    fn result(&self, _id: dag::Id) -> Self::Result { }
+    fn result(&mut self, _id: dag::Id) -> Self::Result { }
 }

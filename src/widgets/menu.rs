@@ -150,7 +150,7 @@ impl<'a, T:'a> WidgetBase for Menu<'a, T> {
 impl<'a, T:'a> Widget for Menu<'a, T> {
     type Result = Option<&'a T>;
 
-    fn result(&self, _id: dag::Id) -> Self::Result {
+    fn result(&mut self, _id: dag::Id) -> Self::Result {
         self.result
     }
 }

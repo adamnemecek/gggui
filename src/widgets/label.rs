@@ -46,5 +46,5 @@ impl<'a> WidgetBase for Label<'a> {
 impl<'a> Widget for Label<'a> {
     type Result = ();
 
-    fn result(&self, _id: dag::Id) -> Self::Result { }
+    fn result(&mut self, _id: dag::Id) -> Self::Result { }
 }

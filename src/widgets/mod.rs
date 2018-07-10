@@ -37,7 +37,7 @@ pub trait WidgetBase {
 pub trait Widget: WidgetBase {
     type Result;
 
-    fn result(&self, id: dag::Id) -> Self::Result;
+    fn result(&mut self, id: dag::Id) -> Self::Result;
 }
 
 pub struct Style {

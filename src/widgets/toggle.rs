@@ -112,7 +112,7 @@ impl<T: Clone+PartialEq> WidgetBase for Toggle<T> {
 impl<T: Clone+PartialEq> Widget for Toggle<T> {
     type Result = Option<T>;
 
-    fn result(&self, _id: dag::Id) -> Self::Result {
+    fn result(&mut self, _id: dag::Id) -> Self::Result {
         self.clicked.clone()
     }
 }

@@ -37,6 +37,16 @@ impl Layout {
         }
     }
 
+    pub fn fill() -> Self {
+        Self {
+            current: None,
+            margin: Rect::from_wh(0.0, 0.0),
+            padding: Rect::from_wh(0.0, 0.0),
+            constrain_width: Constraint::Fill,
+            constrain_height: Constraint::Fill,
+        }
+    }
+
     pub fn with_padding(mut self, padding: f32) -> Self {
         self.padding = Rect {
             left: padding,
