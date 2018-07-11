@@ -362,6 +362,13 @@ impl<'a> Context<'a> {
     }
 }
 
+impl<'a, T: 'static + Widget> WidgetResult<'a, T> {
+    pub fn with<'b, F: FnOnce(&'b mut Context<'a>)>(&'b mut self, f: F) -> &'b T::Result {
+        f(&mut self.context);
+        &self.result
+    }
+}
+
 // When the context is dropped, events and rendering will be evaluated and the results will be 
 //  posted to the parent context.
 impl<'a> Drop for Context<'a> {

@@ -47,6 +47,26 @@ impl Layout {
         }
     }
 
+    pub fn with_fill_h(mut self) -> Self {
+        self.constrain_width = Constraint::Fill;
+        self
+    }
+
+    pub fn with_fill_v(mut self) -> Self {
+        self.constrain_height = Constraint::Fill;
+        self
+    }
+
+    pub fn with_margin(mut self, margin: f32) -> Self {
+        self.margin = Rect {
+            left: margin,
+            right: margin,
+            top: margin,
+            bottom: margin,
+        };
+        self
+    }
+
     pub fn with_padding(mut self, padding: f32) -> Self {
         self.padding = Rect {
             left: padding,

@@ -33,12 +33,22 @@ impl WidgetBase for Button {
             click: Background::Patch(style.button_pressed.clone(), 1.0),
         };
 
+        self.layout.current.map(|current| {
+            let content = style.button_normal.content_rect(current);
+            self.layout.padding = Rect {
+                left: content.left - current.left,
+                right: current.right - content.right,
+                top: content.top - current.top,
+                bottom: current.bottom - content.bottom,
+            };
+        });
+
         world.create_component(id, self.layout.clone());
         world.create_component(id, background);
         world.create_component(id, Clickable::Idle);
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, _window: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &Ui, _style: &Style, window: Viewport) -> Viewport {
         let mut clickable = world.component::<Clickable>(id).unwrap();
         let mut clickable = clickable.borrow_mut();
 
@@ -50,19 +60,45 @@ impl WidgetBase for Button {
             x => x,
         };
 
-        let layout = world.component::<Layout>(id).unwrap();
-        let content = layout.borrow().current
-            .map(|rect| style.button_normal.content_rect(rect))
-            .unwrap_or(Rect::from_wh(0.0, 0.0));
-
+        let mut layout = world.component::<Layout>(id).unwrap();
+        let parent = layout.borrow().clone();
+        let mut content = parent.after_padding();
+       
         for child in world.children() {
             world.component(*child).map(|mut layout: FetchComponent<Layout>| {
                 let mut layout = layout.borrow_mut();
+
+                let rects: Vec<Rect> = [
+                    parent.constrain_width.clone(), 
+                    parent.constrain_height.clone()
+                ].iter().map(|constraint| match constraint {
+                    Constraint::Fixed => parent.after_padding(),
+                    Constraint::Grow => {
+                        let xy = parent.after_padding();
+                        let wh = layout.current.unwrap();
+                        Rect {
+                            left: xy.left,
+                            top: xy.top,
+                            right: xy.left + wh.width(),
+                            bottom: xy.top + wh.height(),
+                        }
+                    },
+                    Constraint::Fill => window.child_rect.after_padding(parent.padding),
+                }).collect();
+
+                content = Rect {
+                    left: rects[0].left,
+                    right: rects[0].right,
+                    top: rects[1].top,
+                    bottom: rects[1].bottom,
+                };
+
                 layout.current = Some(content);
-                layout.constrain_width = Constraint::Fixed;
-                layout.constrain_height = Constraint::Fixed;
             });
         }
+
+        let mut layout = layout.borrow_mut();
+        layout.current = Some(content.after_margin(layout.padding));
 
         Viewport {
             child_rect: content,

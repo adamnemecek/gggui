@@ -146,7 +146,8 @@ impl WidgetBase for LinearLayout {
 
                 // validate rect
                 if !layout.current.map(|rect| rect.left < rect.right && rect.top < rect.bottom).unwrap_or(false) {
-                    layout.current.take();
+                    //layout.current.take();
+                    
                 } else {
                     extents.0 = if r_to_l { 
                         extents.0.min(layout.current.as_ref().unwrap().left - layout.margin.left) 

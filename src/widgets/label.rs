@@ -35,7 +35,14 @@ impl<'a> WidgetBase for Label<'a> {
         world.create_component(id, text);
     }
 
-    fn update(&mut self, _id: dag::Id, _world: &Ui, _style: &Style, _window: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &Ui, _style: &Style, _window: Viewport) -> Viewport {
+        let mut text = world.component::<Text>(id).unwrap();
+        let mut text = text.borrow_mut();
+
+        if text.text != self.text {
+            text.text = self.text.to_string();
+        }
+
         Viewport {
             child_rect: Rect::from_wh(0.0, 0.0),
             input_rect: None,

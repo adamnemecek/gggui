@@ -17,18 +17,16 @@ pub enum MouseState {
 }
 
 pub struct Scroll {
-    width: f32,
-    height: f32,
+    layout: Layout,
     content: Rect,
     horizontal: bool,
     vertical: bool,
 }
 
 impl Scroll {
-    pub fn new(width: f32, height: f32) -> Self {
+    pub fn new(layout: Layout) -> Self {
         Self {
-            width,
-            height,
+            layout,
             content: Rect::from_wh(0.0, 0.0),
             horizontal: false,
             vertical: false,
@@ -53,19 +51,19 @@ impl WidgetBase for Scroll {
             inner: MouseState::Idle,
         });
         world.create_component(id, Layout {
-            current: Some(Rect::from_wh(self.width, self.height)),
-            margin: Rect::from_wh(0.0, 0.0),
+            current: self.layout.current.or(Some(Rect::zero())),
+            margin: self.layout.margin,
             padding: Rect { 
                 left: 0.0, 
                 top: 0.0, 
                 right: if self.vertical { style.scroll_vertical.0.image.size.width() } else { 0.0 }, 
                 bottom: if self.horizontal { style.scroll_horizontal.0.image.size.width() } else { 0.0 }, 
             },
-            constrain_width: Constraint::Fixed,
-            constrain_height: Constraint::Fixed,
+            constrain_width: self.layout.constrain_width.clone(),
+            constrain_height: self.layout.constrain_height.clone(),
         });
         world.create_component(id, Clipper {
-            rect: Rect::from_wh(self.width, self.height),
+            rect: Rect::zero(),
             intersect: true,
         });
         world.create_component(id, Drawing {

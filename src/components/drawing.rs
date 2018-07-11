@@ -6,9 +6,9 @@ pub struct Drawing {
 }
 
 impl Drawing {
-	pub fn new() -> Self {
-		Self {
-			primitives: vec![],
-		}
-	}
+    pub fn new() -> Self {
+        Self {
+            primitives: vec![],
+        }
+    }
 }
