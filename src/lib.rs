@@ -93,11 +93,18 @@ impl MousePosition {
     }
 }
 
+#[derive(PartialEq)]
+pub enum WindowLayer {
+    Back,
+    Normal,
+    Modal
+}
+
 struct UiWindow {
     id: String,
     tree: Option<dag::Tree>,
     used: usize,
-    modal: bool,
+    layer: WindowLayer,
     rect: Rect,
 }
 
@@ -117,6 +124,7 @@ pub struct Ui {
     tabstop_focus_id: Option<dag::Id>,
     pub viewport: Rect,
     pub cursor: (f32, f32),
+    active_window: String,
     capture: Capture,
     previous_capture: Capture,
     mouse_style: MouseStyle,
@@ -173,6 +181,7 @@ impl Ui {
             tabstop_focus_id: None,
             viewport: Rect::from_wh(0.0, 0.0),
             cursor: (0.0, 0.0),
+            active_window: String::from(""),
             capture: Capture::None,
             previous_capture: Capture::None,
             mouse_style: MouseStyle::Arrow,
@@ -209,9 +218,23 @@ impl Ui {
         if self.events.len() > 0 {
             self.mouse_style = MouseStyle::Arrow;
         }
+
+        let mut no_modal_found = true;
+        self.active_window = self.windows.iter().rev().find(|x| {
+            if x.layer == WindowLayer::Modal {
+                no_modal_found =  false;
+                true
+            } else {
+                self.cursor.0 > x.rect.left &&
+                self.cursor.0 < x.rect.right &&
+                self.cursor.1 > x.rect.top &&
+                self.cursor.1 < x.rect.bottom &&
+                no_modal_found
+            }
+        }).map(|x| x.id.clone()).unwrap_or("".to_string());
     }
 
-    pub fn window<'a>(&'a mut self, style: &'a Style, id: &'a str, modal: bool) -> Context<'a> {
+    pub fn window<'a>(&'a mut self, style: &'a Style, id: &'a str, layer: WindowLayer) -> Context<'a> {
         let mut tree = None;
         
         // find window
@@ -230,7 +253,7 @@ impl Ui {
                 id: id.to_string(),
                 tree: None,
                 used: self.iteration,
-                modal,
+                layer,
                 rect: Rect::zero(),
             });
             tree = Some(dag::Tree::new());
@@ -239,9 +262,16 @@ impl Ui {
         self.tree_stack.push(tree.unwrap());
 
         let viewport = Viewport {
-                child_rect: self.viewport,
-                input_rect: Some(self.viewport),
-            };
+            child_rect: self.viewport,
+
+            // check if the current window is visible right under the cursor.
+            // if it is not, the input rect will be unavailable!
+            input_rect: if self.active_window == id {
+                Some(self.viewport)
+            } else {
+                None
+            },
+        };
 
         Context {
             parent: self,
@@ -445,8 +475,10 @@ impl<'a> Drop for Context<'a> {
             let mut i = self.parent.windows.len() - 1;
             loop {
                 if self.parent.windows[i].id == self.id {
-                    let w = self.parent.windows.remove(i);
-                    self.parent.windows.push(w);
+                    if self.parent.windows[i].layer != WindowLayer::Back {
+                        let w = self.parent.windows.remove(i);
+                        self.parent.windows.push(w);
+                    }
                     break;
                 }
 

@@ -8,6 +8,26 @@ pub enum Flow {
     BottomToTop,
 }
 
+impl Flow {
+    pub fn is_horizontal(&self) -> bool {
+        match self {
+            &Flow::LeftToRight |
+            &Flow::RightToLeft => true,
+            &Flow::TopToBottom |
+            &Flow::BottomToTop => false,
+        }
+    }
+
+    pub fn is_vertical(&self) -> bool {
+        match self {
+            &Flow::LeftToRight |
+            &Flow::RightToLeft => false,
+            &Flow::TopToBottom |
+            &Flow::BottomToTop => true,
+        }
+    }
+}
+
 pub struct LinearLayout {
     layout: Layout,
     background: Option<Background>,
@@ -65,43 +85,91 @@ impl WidgetBase for LinearLayout {
             }
 
             let rect = layout.after_padding();
-            let w = if let &Constraint::Fixed = &layout.constrain_width { &rect } else { &window };
-            let h = if let &Constraint::Fixed = &layout.constrain_height { &rect } else { &window };
+            let w = if let &Constraint::Fixed = &layout.constraints.0 { &rect } else { &window };
+            let h = if let &Constraint::Fixed = &layout.constraints.1 { &rect } else { &window };
             let (cursor, limit) = match self.flow {
                 Flow::LeftToRight => ((rect.left, rect.top), (w.right, h.bottom)),
                 Flow::TopToBottom => ((rect.left, rect.top), (w.right, h.bottom)),
                 Flow::RightToLeft => ((rect.right, rect.top), (w.left, h.bottom)),
                 Flow::BottomToTop => ((rect.left, rect.bottom), (w.right, h.top)),
             };
-            let gw = if let &Constraint::Grow = &layout.constrain_width { true } else { false };
-            let gh = if let &Constraint::Grow = &layout.constrain_height { true } else { false };
+            let gw = if let &Constraint::Grow = &layout.constraints.0 { true } else { false };
+            let gh = if let &Constraint::Grow = &layout.constraints.1 { true } else { false };
             (cursor, limit, (gw, gh))
         };
 
         let mut extents = cursor.clone();
+
+        let mut fills = world.children()
+            .filter_map(|id| world.component::<Layout>(*id))
+            .fold((0.0, 0.0), |(w, h), x| match x.borrow().constraints {
+                (Constraint::Fill, Constraint::Fill) => (w + 1.0, h + 1.0),
+                (Constraint::Fill, _) => (w + 1.0, h),
+                (_, Constraint::Fill) => (w, h + 1.0),
+                _ => (w, h),
+            });
 
         for child in world.children() {
             world.component(*child).map(|mut layout: FetchComponent<Layout>| {
                 let mut layout = layout.borrow_mut();
                 let w = layout.current.as_ref().map(|c| c.width() + layout.margin.left + layout.margin.right);
                 let h = layout.current.as_ref().map(|c| c.height() + layout.margin.top + layout.margin.bottom);
-                let w = match &layout.constrain_width {
+                let w = match &layout.constraints.0 {
                     Constraint::Fixed => w.unwrap_or(0.0),
                     Constraint::Grow => w.unwrap_or(0.0),
-                    Constraint::Fill => (cursor.0 - limit.0).abs(),
+                    Constraint::Fill => if self.flow.is_horizontal() {
+                        let w = (cursor.0 - limit.0).abs() / fills.0;
+                        fills.0 -= 1.0;
+                        w
+                    } else {
+                        (cursor.0 - limit.0).abs()
+                    },
                 };
-                let h = match &layout.constrain_height {
+                let h = match &layout.constraints.1 {
                     Constraint::Fixed => h.unwrap_or(0.0),
                     Constraint::Grow => h.unwrap_or(0.0),
-                    Constraint::Fill => (cursor.1 - limit.1).abs(),
+                    Constraint::Fill => if self.flow.is_vertical() {
+                        let h = (cursor.1 - limit.1).abs() / fills.1;
+                        fills.1 -= 1.0;
+                        h
+                    } else {
+                        (cursor.1 - limit.1).abs()
+                    },
                 };
                 
-                // update layout rect
-                layout.current = Some(Rect {
-                    left:   if r_to_l {cursor.0-w+layout.margin.left} else {cursor.0+layout.margin.left},
-                    right:  if r_to_l {cursor.0-layout.margin.right}  else {cursor.0+w-layout.margin.right},
-                    top:    if b_to_t {cursor.1-h+layout.margin.top}  else {cursor.1+layout.margin.top},
-                    bottom: if b_to_t {cursor.1-layout.margin.bottom} else {cursor.1+h-layout.margin.bottom},
+                // update layout rect and apply gravity
+                layout.current = Some({
+                    let mut result = Rect {
+                        left:   if r_to_l {cursor.0-w+layout.margin.left} else {cursor.0+layout.margin.left},
+                        right:  if r_to_l {cursor.0-layout.margin.right}  else {cursor.0+w-layout.margin.right},
+                        top:    if b_to_t {cursor.1-h+layout.margin.top}  else {cursor.1+layout.margin.top},
+                        bottom: if b_to_t {cursor.1-layout.margin.bottom} else {cursor.1+h-layout.margin.bottom},
+                    };
+                    match self.flow {
+                        Flow::LeftToRight |
+                        Flow::RightToLeft => {
+                            let align = limit.1 - cursor.1 - h;
+                            let shift = match layout.gravity.1 {
+                                Gravity::Begin => 0.0,
+                                Gravity::Middle => align * 0.5,
+                                Gravity::End => align,
+                            };
+                            result.top += shift;
+                            result.bottom += shift;
+                        },
+                        Flow::TopToBottom |
+                        Flow::BottomToTop => {
+                            let align = limit.0 - cursor.0 - w;
+                            let shift = match layout.gravity.0 {
+                                Gravity::Begin => 0.0,
+                                Gravity::Middle => align * 0.5,
+                                Gravity::End => align,
+                            };
+                            result.left += shift;
+                            result.right += shift;
+                        },
+                    };
+                    result
                 });
 
                 // advance cursor
@@ -166,12 +234,12 @@ impl WidgetBase for LinearLayout {
         // update own layout
         let mut layout = layout.borrow_mut();
         let old = layout.current.unwrap();
-        layout.current.as_mut().unwrap().right = match layout.constrain_width.clone() {
+        layout.current.as_mut().unwrap().right = match layout.constraints.0.clone() {
             Constraint::Fixed => old.right,
             Constraint::Grow => extents.0 + layout.padding.right,
             Constraint::Fill => window.right + layout.padding.right,
         };
-        layout.current.as_mut().unwrap().bottom = match layout.constrain_height.clone() {
+        layout.current.as_mut().unwrap().bottom = match layout.constraints.1.clone() {
             Constraint::Fixed => old.bottom,
             Constraint::Grow => extents.1 + layout.padding.bottom,
             Constraint::Fill => window.bottom + layout.padding.bottom,
@@ -179,19 +247,19 @@ impl WidgetBase for LinearLayout {
 
         let current = layout.current.as_ref().unwrap();
         let child_rect = Rect {
-            left: match layout.constrain_width.clone() { 
+            left: match layout.constraints.0.clone() { 
                 Constraint::Fixed => current.left + layout.padding.left,
                 _ => window.left,
             },
-            right: match layout.constrain_width.clone() { 
+            right: match layout.constraints.0.clone() { 
                 Constraint::Fixed => current.right - layout.padding.right,
                 _ => window.right,
             },
-            top: match layout.constrain_height.clone() { 
+            top: match layout.constraints.1.clone() { 
                 Constraint::Fixed => current.top + layout.padding.top,
                 _ => window.top,
             },
-            bottom: match layout.constrain_height.clone() { 
+            bottom: match layout.constraints.1.clone() { 
                 Constraint::Fixed => current.bottom - layout.padding.bottom,
                 _ => window.bottom,
             },

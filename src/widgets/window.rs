@@ -34,8 +34,8 @@ impl WidgetBase for Window {
             margin: Rect::zero(),
             padding: Rect::zero(),
             current: Some(self.min_size),
-            constrain_width: Constraint::Fixed,
-            constrain_height: Constraint::Fixed,
+            constraints: (Constraint::Fixed, Constraint::Fixed),
+            gravity: (Gravity::Begin, Gravity::Begin),
         });
         world.create_component(id, WidgetBackground{
             normal: Background::Patch(style.window.clone(), 1.0),
@@ -56,8 +56,7 @@ impl WidgetBase for Window {
             world.component(*child).map(|mut layout: FetchComponent<Layout>| {
                 let mut layout = layout.borrow_mut();
                 layout.current = Some(content);
-                layout.constrain_width = Constraint::Fixed;
-                layout.constrain_height = Constraint::Fixed;
+                layout.constraints = (Constraint::Fixed, Constraint::Fixed);
             });
         }
 

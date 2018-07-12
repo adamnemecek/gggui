@@ -59,8 +59,8 @@ impl WidgetBase for Scroll {
                 right: if self.vertical { style.scroll_vertical.0.image.size.width() } else { 0.0 }, 
                 bottom: if self.horizontal { style.scroll_horizontal.0.image.size.width() } else { 0.0 }, 
             },
-            constrain_width: self.layout.constrain_width.clone(),
-            constrain_height: self.layout.constrain_height.clone(),
+            constraints: self.layout.constraints.clone(),
+            gravity: self.layout.gravity.clone(),
         });
         world.create_component(id, Clipper {
             rect: Rect::zero(),

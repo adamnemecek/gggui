@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum Constraint {
     Fixed,
     Grow,
@@ -8,12 +8,19 @@ pub enum Constraint {
 }
 
 #[derive(Clone)]
+pub enum Gravity {
+    Begin,
+    Middle,
+    End,
+}
+
+#[derive(Clone)]
 pub struct Layout {
     pub current: Option<Rect>,
     pub margin: Rect,
     pub padding: Rect,
-    pub constrain_width: Constraint,
-    pub constrain_height: Constraint,
+    pub constraints: (Constraint, Constraint),
+    pub gravity: (Gravity, Gravity),
 }
 
 impl Layout {
@@ -22,8 +29,8 @@ impl Layout {
             current: Some(Rect::from_wh(width, height)),
             margin: Rect::from_wh(0.0, 0.0),
             padding: Rect::from_wh(0.0, 0.0),
-            constrain_width: Constraint::Fixed,
-            constrain_height: Constraint::Fixed,
+            constraints: (Constraint::Fixed, Constraint::Fixed),
+            gravity: (Gravity::Begin, Gravity::Begin),
         }
     }
 
@@ -32,28 +39,28 @@ impl Layout {
             current: None,
             margin: Rect::from_wh(0.0, 0.0),
             padding: Rect::from_wh(0.0, 0.0),
-            constrain_width: Constraint::Grow,
-            constrain_height: Constraint::Grow,
+            constraints: (Constraint::Grow, Constraint::Grow),
+            gravity: (Gravity::Begin, Gravity::Begin),
         }
     }
 
     pub fn fill() -> Self {
         Self {
-            current: None,
+            current: Some(Rect::zero()),
             margin: Rect::from_wh(0.0, 0.0),
             padding: Rect::from_wh(0.0, 0.0),
-            constrain_width: Constraint::Fill,
-            constrain_height: Constraint::Fill,
+            constraints: (Constraint::Fill, Constraint::Fill),
+            gravity: (Gravity::Begin, Gravity::Begin),
         }
     }
 
     pub fn with_fill_h(mut self) -> Self {
-        self.constrain_width = Constraint::Fill;
+        self.constraints.0 = Constraint::Fill;
         self
     }
 
     pub fn with_fill_v(mut self) -> Self {
-        self.constrain_height = Constraint::Fill;
+        self.constraints.1 = Constraint::Fill;
         self
     }
 

@@ -50,8 +50,8 @@ impl<T: Clone+PartialEq> WidgetBase for Toggle<T> {
             } else {
                 style.checkbox_normal.size
             }),
-            constrain_width: Constraint::Fixed,
-            constrain_height: Constraint::Fixed,
+            constraints: (Constraint::Fixed, Constraint::Fixed),
+            gravity: (Gravity::Begin, Gravity::Begin),
         };
 
         world.create_component(id, layout);

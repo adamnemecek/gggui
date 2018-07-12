@@ -12,8 +12,8 @@ impl Button {
                 margin: Rect{ left: 5.0, top: 5.0, right: 5.0, bottom: 5.0 },
                 padding: Rect{ left: 5.0, top: 5.0, right: 5.0, bottom: 5.0 },
                 current: Some(Rect::from_wh(256.0, 32.0)),
-                constrain_width: Constraint::Fill,
-                constrain_height: Constraint::Fixed,
+                constraints: (Constraint::Fill, Constraint::Fixed),
+                gravity: (Gravity::Begin, Gravity::Begin),
             },
             clicked: false,
         }
@@ -69,8 +69,8 @@ impl WidgetBase for Button {
                 let mut layout = layout.borrow_mut();
 
                 let rects: Vec<Rect> = [
-                    parent.constrain_width.clone(), 
-                    parent.constrain_height.clone()
+                    parent.constraints.0.clone(), 
+                    parent.constraints.1.clone()
                 ].iter().map(|constraint| match constraint {
                     Constraint::Fixed => parent.after_padding(),
                     Constraint::Grow => {

@@ -4,12 +4,23 @@ pub struct Label<'a> {
     text: &'a str,
     size: f32,
     wrap: TextWrap,
+    gravity: (Gravity, Gravity),
 }
 
 impl<'a> Label<'a> {
     pub fn new(text: &'a str, size: f32, wrap: TextWrap) -> Self {
         Self {
-            text, size, wrap
+            text, size, wrap, 
+            gravity: (Gravity::Begin, Gravity::Begin),
+        }
+    }
+
+    pub fn simple(text: &'a str) -> Self {
+        Self {
+            text, 
+            size: 16.0, 
+            wrap: TextWrap::NoWrap, 
+            gravity: (Gravity::Middle, Gravity::Begin),
         }
     }
 }
@@ -27,8 +38,8 @@ impl<'a> WidgetBase for Label<'a> {
             current: Some(text.measure(None)),
             margin: Rect { left: 5.0, right: 5.0, top: 5.0, bottom: 5.0 },
             padding: Rect::from_wh(0.0, 0.0),
-            constrain_width: Constraint::Fixed,
-            constrain_height: Constraint::Fixed,
+            constraints: (Constraint::Fixed, Constraint::Fixed),
+            gravity: self.gravity.clone(),
         };
 
         world.create_component(id, layout);
@@ -41,6 +52,8 @@ impl<'a> WidgetBase for Label<'a> {
 
         if text.text != self.text {
             text.text = self.text.to_string();
+            let mut layout = world.component::<Layout>(id).unwrap();
+            layout.borrow_mut().current = Some(text.measure(None));
         }
 
         Viewport {

@@ -47,8 +47,8 @@ impl<'a> WidgetBase for Input<'a> {
             current: Some(Rect::from_wh(128.0, 32.0)),
             margin: Rect { left: 5.0, right: 5.0, top: 5.0, bottom: 5.0 },
             padding: Rect { left: 4.0, right: 4.0, top: 4.0, bottom: 4.0 },
-            constrain_width: Constraint::Fill,
-            constrain_height: Constraint::Fixed,
+            constraints: (Constraint::Fill, Constraint::Fixed),
+            gravity: (Gravity::Begin, Gravity::Begin),
         };
 
         world.create_component(id, InputState::Idle(0.0, 0.0));
