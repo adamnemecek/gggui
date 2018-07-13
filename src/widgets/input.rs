@@ -41,6 +41,8 @@ impl<'a> WidgetBase for Input<'a> {
             size: 16.0,
             wrap: TextWrap::NoWrap,
             font: style.font.clone(),
+            color: Color::black(),
+            border: None,
         };
 
         let layout = Layout {

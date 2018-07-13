@@ -286,6 +286,20 @@ impl Ui {
     pub fn render(&mut self) -> (DrawList, MouseStyle, MouseMode) {
         let mut drawlists = vec![];
 
+        self.windows.sort_by(|a,b| {
+            let a = match &a.layer {
+                WindowLayer::Back => 0,
+                WindowLayer::Normal => 1,
+                WindowLayer::Modal => 2,
+            };
+            let b = match &b.layer {
+                WindowLayer::Back => 0,
+                WindowLayer::Normal => 1,
+                WindowLayer::Modal => 2,
+            };
+            a.cmp(&b)
+        });
+
         let mut windows = replace(&mut self.windows, vec![]);
 
         for win in windows.iter_mut() {
@@ -638,35 +652,53 @@ impl Ui {
                         .and_then(|c| Some(cmd.push(c)));
                 },
 
-                Primitive::DrawText(text, rect, color) => if draw_enabled {
-                    let color = [color.r, color.g, color.b, color.a];
+                Primitive::DrawText(text, rect) => if draw_enabled {
+                    let color = [text.color.r, text.color.g, text.color.b, text.color.a];
+                    let border = text.border.map(|c| [c.r, c.g, c.b, c.a]).unwrap_or(color);
                     let mode = 0;
                     let offset = vtx.len();
                     let vp = self.viewport;
+
+                    let offsets = [(-1.0,0.0,true),(1.0,0.0,true),(0.0,-1.0,true),(0.0,1.0,true),(0.0,0.0,false)];
+                    let offsets = if text.border.is_some() {
+                        &offsets[4..5]
+                    } else {
+                        &offsets[0..1]
+                    };
 
                     self.cache.draw_text(  
                         &text, 
                         rect,
                         |uv, pos| {
-                            let rc = pos.to_device_coordinates(vp);
-                            vtx.push(Vertex{ 
-                                pos: [rc.left, rc.top],     uv: uv.pt(0.0, 0.0), color, mode 
-                            });
-                            vtx.push(Vertex{ 
-                                pos: [rc.right, rc.top],    uv: uv.pt(1.0, 0.0), color, mode 
-                            });
-                            vtx.push(Vertex{ 
-                                pos: [rc.right, rc.bottom], uv: uv.pt(1.0, 1.0), color, mode 
-                            });
-                            vtx.push(Vertex{ 
-                                pos: [rc.left, rc.top],     uv: uv.pt(0.0, 0.0), color, mode 
-                            });
-                            vtx.push(Vertex{ 
-                                pos: [rc.right, rc.bottom], uv: uv.pt(1.0, 1.0), color, mode 
-                            });
-                            vtx.push(Vertex{ 
-                                pos: [rc.left, rc.bottom],  uv: uv.pt(0.0, 1.0), color, mode 
-                            });
+                            for (dx, dy, b) in offsets {
+                                let rc = Rect{
+                                    left: pos.left + dx,
+                                    top: pos.top + dy,
+                                    right: pos.right + dx,
+                                    bottom: pos.bottom + dy,
+                                }.to_device_coordinates(vp);
+
+                                let color = if *b { border } else { color };
+
+                                vtx.push(Vertex{ 
+                                    pos: [rc.left, rc.top],     uv: uv.pt(0.0, 0.0), color, mode 
+                                });
+                                vtx.push(Vertex{ 
+                                    pos: [rc.right, rc.top],    uv: uv.pt(1.0, 0.0), color, mode 
+                                });
+                                vtx.push(Vertex{ 
+                                    pos: [rc.right, rc.bottom], uv: uv.pt(1.0, 1.0), color, mode 
+                                });
+                                vtx.push(Vertex{ 
+                                    pos: [rc.left, rc.top],     uv: uv.pt(0.0, 0.0), color, mode 
+                                });
+                                vtx.push(Vertex{ 
+                                    pos: [rc.right, rc.bottom], uv: uv.pt(1.0, 1.0), color, mode 
+                                });
+                                vtx.push(Vertex{ 
+                                    pos: [rc.left, rc.bottom],  uv: uv.pt(0.0, 1.0), color, mode 
+                                });
+                            }
                         }
                     );
 

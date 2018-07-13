@@ -32,6 +32,7 @@ pub struct LinearLayout {
     layout: Layout,
     background: Option<Background>,
     flow: Flow,
+    grid: u32,
 }
 
 impl LinearLayout {
@@ -40,7 +41,20 @@ impl LinearLayout {
             layout,
             flow,
             background: None,
+            grid: 1,
         }
+    }
+
+    pub fn with_columns(mut self, columns: u32) -> Self {
+        assert!(self.flow.is_vertical());
+        self.grid = columns;
+        self
+    }
+
+    pub fn with_rows(mut self, columns: u32) -> Self {
+        assert!(self.flow.is_horizontal());
+        self.grid = columns;
+        self
     }
 
     pub fn with_bg(mut self, background: Background) -> Self {
@@ -98,7 +112,39 @@ impl WidgetBase for LinearLayout {
             (cursor, limit, (gw, gh))
         };
 
+        let cursor_start = cursor.clone();
+
         let mut extents = cursor.clone();
+
+        let cells = if self.grid > 1 {
+            let mut cell = 0;
+            world.children()
+                .filter_map(|id| world.component::<Layout>(*id))
+                .fold(Vec::<f32>::new(), |mut cells, layout| {
+                    let layout = layout.borrow();
+
+                    if cell >= cells.len() {
+                        cells.push(0.0);
+                    }
+                
+                    if self.flow.is_vertical() {
+                        cells[cell] = cells[cell].max(layout.current
+                            .as_ref()
+                            .map(|c| c.width() + layout.margin.left + layout.margin.right)
+                            .unwrap_or(0.0));
+                    } else {
+                        cells[cell] = cells[cell].max(layout.current
+                            .as_ref()
+                            .map(|c| c.height() + layout.margin.top + layout.margin.bottom)
+                            .unwrap_or(0.0));
+                    }
+
+                    cell = (cell + 1) % self.grid as usize;
+                    cells
+                })
+        } else {
+            vec![]
+        };
 
         let mut fills = world.children()
             .filter_map(|id| world.component::<Layout>(*id))
@@ -108,6 +154,8 @@ impl WidgetBase for LinearLayout {
                 (_, Constraint::Fill) => (w, h + 1.0),
                 _ => (w, h),
             });
+
+        let mut cell = 0;
 
         for child in world.children() {
             world.component(*child).map(|mut layout: FetchComponent<Layout>| {
@@ -173,12 +221,31 @@ impl WidgetBase for LinearLayout {
                 });
 
                 // advance cursor
-                match self.flow {
-                    Flow::LeftToRight => cursor.0 += w,
-                    Flow::TopToBottom => cursor.1 += h,
-                    Flow::RightToLeft => cursor.0 -= w,
-                    Flow::BottomToTop => cursor.1 -= h,
-                };
+                if cells.len() > 1 {
+                    match self.flow {
+                        Flow::LeftToRight => cursor.1 += cells[cell],
+                        Flow::TopToBottom => cursor.0 += cells[cell],
+                        Flow::RightToLeft => cursor.1 -= cells[cell],
+                        Flow::BottomToTop => cursor.0 -= cells[cell],
+                    };
+                    cell += 1;
+                    if cell >= cells.len() {
+                        cell = 0;
+                        match self.flow {
+                            Flow::LeftToRight => cursor = (extents.0, cursor_start.1),
+                            Flow::TopToBottom => cursor = (cursor_start.0, extents.1),
+                            Flow::RightToLeft => cursor = (extents.0, cursor_start.1),
+                            Flow::BottomToTop => cursor = (cursor_start.0, extents.1),
+                        };
+                    }
+                } else {
+                    match self.flow {
+                        Flow::LeftToRight => cursor.0 += w,
+                        Flow::TopToBottom => cursor.1 += h,
+                        Flow::RightToLeft => cursor.0 -= w,
+                        Flow::BottomToTop => cursor.1 -= h,
+                    };
+                }
 
                 // apply constraints
                 if !grow.0 {

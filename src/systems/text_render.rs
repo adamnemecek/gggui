@@ -14,7 +14,7 @@ impl System<Vec<Primitive>> for TextRenderSystem {
         if layout.current.is_some() {
             let rect = layout.after_padding();
 
-            drawlist.push(Primitive::DrawText(text.clone(), rect, Color::black()));
+            drawlist.push(Primitive::DrawText(text.clone(), rect));
         }
     }
 }

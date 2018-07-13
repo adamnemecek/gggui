@@ -5,13 +5,19 @@ pub struct Label<'a> {
     size: f32,
     wrap: TextWrap,
     gravity: (Gravity, Gravity),
+    color: Color,
+    border: Option<Color>,
 }
 
 impl<'a> Label<'a> {
     pub fn new(text: &'a str, size: f32, wrap: TextWrap) -> Self {
         Self {
-            text, size, wrap, 
+            text, 
+            size, 
+            wrap, 
             gravity: (Gravity::Begin, Gravity::Begin),
+            color: Color::black(),
+            border: None,
         }
     }
 
@@ -21,7 +27,19 @@ impl<'a> Label<'a> {
             size: 16.0, 
             wrap: TextWrap::NoWrap, 
             gravity: (Gravity::Middle, Gravity::Begin),
+            color: Color::black(),
+            border: None,
         }
+    }
+
+    pub fn with_color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
+    }
+
+    pub fn with_border(mut self, color: Color) -> Self {
+        self.border = Some(color);
+        self
     }
 }
 
@@ -32,6 +50,8 @@ impl<'a> WidgetBase for Label<'a> {
             size: self.size,
             wrap: self.wrap,
             font: style.font.clone(),
+            color: self.color,
+            border: self.border,
         };
 
         let layout = Layout {

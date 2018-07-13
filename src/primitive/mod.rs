@@ -21,7 +21,7 @@ pub enum Primitive {
     PushClip(Rect),
     PopClip,
     DrawRect(Rect, Color),
-    DrawText(Text, Rect, Color),
+    DrawText(Text, Rect),
     Draw9(Patch, Rect, Color),
     DrawImage(Image, Rect, Color),
 }
