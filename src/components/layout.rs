@@ -16,79 +16,70 @@ pub enum Gravity {
 
 #[derive(Clone)]
 pub struct Layout {
-    pub current: Option<Rect>,
-    pub margin: Rect,
-    pub padding: Rect,
-    pub constraints: (Constraint, Constraint),
-    pub gravity: (Gravity, Gravity),
+    pub left: cassowary::Variable,
+    pub right: cassowary::Variable,
+    pub top: cassowary::Variable,
+    pub bottom: cassowary::Variable,
+    pub center_x: cassowary::Variable,
+    pub center_y: cassowary::Variable,
+    pub width: cassowary::Variable,
+    pub height: cassowary::Variable,
+    constraints: Vec<cassowary::Constraint>,
+    current: Option<Rect>,
 }
 
+use cassowary::strength::{WEAK, STRONG, REQUIRED};
+use cassowary::WeightedRelation::*;
+
 impl Layout {
-    pub fn new(width: f32, height: f32) -> Self {
-        Self {
-            current: Some(Rect::from_wh(width, height)),
-            margin: Rect::from_wh(0.0, 0.0),
-            padding: Rect::from_wh(0.0, 0.0),
-            constraints: (Constraint::Fixed, Constraint::Fixed),
-            gravity: (Gravity::Begin, Gravity::Begin),
-        }
-    }
+    pub fn new() -> Self {
+        let left     = cassowary::Variable::new();
+        let right    = cassowary::Variable::new();
+        let top      = cassowary::Variable::new();
+        let bottom   = cassowary::Variable::new();
+        let center_x = cassowary::Variable::new();
+        let center_y = cassowary::Variable::new();
+        let width    = cassowary::Variable::new();
+        let height   = cassowary::Variable::new();
 
-    pub fn grow() -> Self {
         Self {
+            constraints: vec![
+                left + width |EQ(REQUIRED)| right,
+                top + height |EQ(REQUIRED)| bottom,
+                center_x |EQ(REQUIRED)| (left+right)*0.5,
+                center_y |EQ(REQUIRED)| (top+bottom)*0.5,
+            ],
             current: None,
-            margin: Rect::from_wh(0.0, 0.0),
-            padding: Rect::from_wh(0.0, 0.0),
-            constraints: (Constraint::Grow, Constraint::Grow),
-            gravity: (Gravity::Begin, Gravity::Begin),
+
+            left, right,
+            top, bottom,
+            center_x, 
+            center_y,
+            width, height
         }
     }
 
-    pub fn fill() -> Self {
-        Self {
-            current: Some(Rect::zero()),
-            margin: Rect::from_wh(0.0, 0.0),
-            padding: Rect::from_wh(0.0, 0.0),
-            constraints: (Constraint::Fill, Constraint::Fill),
-            gravity: (Gravity::Begin, Gravity::Begin),
-        }
-    }
-
-    pub fn with_fill_h(mut self) -> Self {
-        self.constraints.0 = Constraint::Fill;
+    pub fn with_intrinsic_size_constraints(mut self, width: f32, height: f32, hugging: f64) -> Self {
+        // compression resistance
+        self.constraints.push(self.width |GE(STRONG)| width);
+        self.constraints.push(self.height |GE(STRONG)| height);
+        // content hugging
+        self.constraints.push(self.width |LE(WEAK+hugging)| width);
+        self.constraints.push(self.height |LE(WEAK+hugging)| height);
         self
     }
 
-    pub fn with_fill_v(mut self) -> Self {
-        self.constraints.1 = Constraint::Fill;
+    pub fn with_constraint(mut self, constraint: cassowary::Constraint) -> Self {
+        self.constraints.push(constraint);
         self
     }
 
-    pub fn with_margin(mut self, margin: f32) -> Self {
-        self.margin = Rect {
-            left: margin,
-            right: margin,
-            top: margin,
-            bottom: margin,
-        };
+    pub fn with_constraints(mut self, mut constraints: Vec<cassowary::Constraint>) -> Self {
+        self.constraints.append(&mut constraints);
         self
     }
 
-    pub fn with_padding(mut self, padding: f32) -> Self {
-        self.padding = Rect {
-            left: padding,
-            right: padding,
-            top: padding,
-            bottom: padding,
-        };
-        self
-    }
-
-    pub fn after_margin(&self) -> Rect {
-        self.current.clone().unwrap().after_margin(self.margin)
-    }
-
-    pub fn after_padding(&self) -> Rect {
-        self.current.clone().unwrap().after_padding(self.padding)
+    pub fn current<'a>(&'a self) -> Option<&'a Rect> {
+        self.current.as_ref()
     }
 }

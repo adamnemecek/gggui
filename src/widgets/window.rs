@@ -26,6 +26,15 @@ impl Window {
             resizable: true,
         }
     }
+
+    pub fn sized(width: f32, height: f32) -> Self {
+        Self {
+            min_size: Rect::from_wh(width, height).translate(100.0, 100.0), 
+            open: true,
+            draggable: true,
+            resizable: true,
+        }
+    }
 }
 
 impl WidgetBase for Window {

@@ -3,6 +3,7 @@ extern crate smallvec;
 extern crate rusttype;
 extern crate image;
 extern crate clipboard;
+extern crate cassowary;
 
 #[cfg(feature="gfx-renderer")] #[macro_use] pub extern crate gfx;
 #[cfg(feature="vulkano-renderer")] #[macro_use] pub extern crate vulkano;
