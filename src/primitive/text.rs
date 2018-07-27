@@ -16,6 +16,7 @@ pub struct Text {
     pub wrap: TextWrap,
     pub color: Color,
     pub border: Option<Color>,
+    pub padding: Rect,
 }
 
 pub struct CharPositionIter<'a, 'b: 'a> {

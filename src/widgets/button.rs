@@ -1,26 +1,22 @@
+use cassowary::strength::*;
+use cassowary::WeightedRelation::*;
 use super::*;
 
 pub struct Button {
-    layout: Layout,
+    size: Option<(f32, f32)>,
     clicked: bool,
 }
 
 impl Button {
     pub fn new() -> Self {
         Self {
-            layout: Layout{
-                margin: Rect{ left: 5.0, top: 5.0, right: 5.0, bottom: 5.0 },
-                padding: Rect{ left: 5.0, top: 5.0, right: 5.0, bottom: 5.0 },
-                current: Some(Rect::from_wh(256.0, 32.0)),
-                constraints: (Constraint::Fill, Constraint::Fixed),
-                gravity: (Gravity::Begin, Gravity::Begin),
-            },
+            size: None,
             clicked: false,
         }
     }
 
-    pub fn with_layout(mut self, layout: Layout) -> Self {
-        self.layout = layout;
+    pub fn with_size(mut self, size: (f32, f32)) -> Self {
+        self.size = Some(size);
         self
     }
 }
@@ -33,17 +29,14 @@ impl WidgetBase for Button {
             click: Background::Patch(style.button_pressed.clone(), 1.0),
         };
 
-        self.layout.current.map(|current| {
-            let content = style.button_normal.content_rect(current);
-            self.layout.padding = Rect {
-                left: content.left - current.left,
-                right: current.right - content.right,
-                top: content.top - current.top,
-                bottom: current.bottom - content.bottom,
-            };
-        });
+        let size = style.button_normal.minimum_size();
 
-        world.create_component(id, self.layout.clone());
+        world.create_component(id, Layout::new()
+            .with_margins(style.button_normal.margin())
+            .with_constraints(|layout| vec![
+                layout.width |GE(STRONG)| size.0 as f64,
+                layout.height |GE(STRONG)| size.1 as f64
+            ]));
         world.create_component(id, background);
         world.create_component(id, Clickable::Idle);
     }
@@ -60,48 +53,8 @@ impl WidgetBase for Button {
             x => x,
         };
 
-        let mut layout = world.component::<Layout>(id).unwrap();
-        let parent = layout.borrow().clone();
-        let mut content = parent.after_padding();
-       
-        for child in world.children() {
-            world.component(*child).map(|mut layout: FetchComponent<Layout>| {
-                let mut layout = layout.borrow_mut();
-
-                let rects: Vec<Rect> = [
-                    parent.constraints.0.clone(), 
-                    parent.constraints.1.clone()
-                ].iter().map(|constraint| match constraint {
-                    Constraint::Fixed => parent.after_padding(),
-                    Constraint::Grow => {
-                        let xy = parent.after_padding();
-                        let wh = layout.current.unwrap();
-                        Rect {
-                            left: xy.left,
-                            top: xy.top,
-                            right: xy.left + wh.width(),
-                            bottom: xy.top + wh.height(),
-                        }
-                    },
-                    Constraint::Fill => window.child_rect.after_padding(parent.padding),
-                }).collect();
-
-                content = Rect {
-                    left: rects[0].left,
-                    right: rects[0].right,
-                    top: rects[1].top,
-                    bottom: rects[1].bottom,
-                };
-
-                layout.current = Some(content);
-            });
-        }
-
-        let mut layout = layout.borrow_mut();
-        layout.current = Some(content.after_margin(layout.padding));
-
         Viewport {
-            child_rect: content,
+            child_rect: Rect::zero(),
             input_rect: None,
         }
     }

@@ -39,13 +39,7 @@ impl Window {
 
 impl WidgetBase for Window {
     fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style) {
-        world.create_component(id, Layout{
-            margin: Rect::zero(),
-            padding: Rect::zero(),
-            current: Some(self.min_size),
-            constraints: (Constraint::Fixed, Constraint::Fixed),
-            gravity: (Gravity::Begin, Gravity::Begin),
-        });
+        world.create_component(id, Layout::new().with_margins(style.window.margin()));
         world.create_component(id, WidgetBackground{
             normal: Background::Patch(style.window.clone(), 1.0),
             hover: Background::Patch(style.window.clone(), 1.0),
@@ -60,14 +54,6 @@ impl WidgetBase for Window {
         let content = layout.borrow().current
             .map(|rect| style.window.content_rect(rect))
             .unwrap_or(Rect::zero());
-
-        for child in world.children() {
-            world.component(*child).map(|mut layout: FetchComponent<Layout>| {
-                let mut layout = layout.borrow_mut();
-                layout.current = Some(content);
-                layout.constraints = (Constraint::Fixed, Constraint::Fixed);
-            });
-        }
 
         Viewport {
             child_rect: content,

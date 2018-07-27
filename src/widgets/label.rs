@@ -52,17 +52,12 @@ impl<'a> WidgetBase for Label<'a> {
             font: style.font.clone(),
             color: self.color,
             border: self.border,
+            padding: Rect::zero(),
         };
 
-        let layout = Layout {
-            current: Some(text.measure(None)),
-            margin: Rect { left: 5.0, right: 5.0, top: 5.0, bottom: 5.0 },
-            padding: Rect::from_wh(0.0, 0.0),
-            constraints: (Constraint::Fixed, Constraint::Fixed),
-            gravity: self.gravity.clone(),
-        };
+        let measured = text.measure(None);
 
-        world.create_component(id, layout);
+        world.create_component(id, Layout::new().with_intrinsic_size_constraints(measured.width(), measured.height(), 251.0));
         world.create_component(id, text);
     }
 
@@ -77,7 +72,7 @@ impl<'a> WidgetBase for Label<'a> {
         }
 
         Viewport {
-            child_rect: Rect::from_wh(0.0, 0.0),
+            child_rect: Rect::zero(),
             input_rect: None,
         }
     }

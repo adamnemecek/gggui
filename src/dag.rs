@@ -1,3 +1,4 @@
+use std::mem::replace;
 use std::collections::HashMap;
 
 pub type Id = (usize, usize);
@@ -14,6 +15,7 @@ pub struct Tree {
 }
 
 pub struct FreeList {
+    recently_freed: Vec<Id>,
     free: Vec<Id>,
     next: usize,
 }
@@ -22,12 +24,14 @@ impl FreeList {
     pub fn new() -> Self {
         Self {
             free: vec![],
+            recently_freed: vec![],
             next: 0
         }
     }
 
     pub fn push(&mut self, (x, gen): Id) {
         self.free.push((x, gen+1));
+        self.recently_freed.push((x, gen));
     }
 
     pub fn pop(&mut self) -> Id {
@@ -35,6 +39,10 @@ impl FreeList {
             self.next += 1;
             (self.next, 1)
         })
+    }
+
+    pub fn fetch_recently_freed(&mut self) -> Vec<Id> {
+        replace(&mut self.recently_freed, vec![])
     }
 
     pub fn len(&self) -> usize {

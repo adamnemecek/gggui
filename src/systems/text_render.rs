@@ -12,7 +12,7 @@ impl System<Vec<Primitive>> for TextRenderSystem {
         let text = text.borrow();
 
         if layout.current.is_some() {
-            let rect = layout.after_padding();
+            let rect = layout.current().unwrap().after_padding(text.padding);
 
             drawlist.push(Primitive::DrawText(text.clone(), rect));
         }

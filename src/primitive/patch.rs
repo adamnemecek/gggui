@@ -48,6 +48,28 @@ impl Patch {
 
         result
     }
+    pub fn margin(&self) -> Rect {
+        let patch_content = self.image.size.sub(Rect{ 
+            left: self.h_content.0, 
+            right: self.h_content.1,
+            top: self.v_content.0,
+            bottom: self.v_content.1,
+        });
+
+        Rect {
+            left: patch_content.left,
+            right: self.image.size.right - patch_content.right,
+            top: patch_content.top,
+            bottom: self.image.size.bottom - patch_content.bottom,
+        }
+    }
+    pub fn minimum_size(&self) -> (f32, f32) {
+        let margin = self.margin();
+        (
+            self.image.size.width() - margin.left - margin.right,
+            self.image.size.height() - margin.top - margin.bottom
+        )
+    }
     pub fn content_rect(&self, span: Rect) -> Rect {
         let mut result = span;
 

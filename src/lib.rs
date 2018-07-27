@@ -130,6 +130,8 @@ pub struct Ui {
     previous_capture: Capture,
     mouse_style: MouseStyle,
     mouse_mode: MouseMode,
+    layout_solver: cassowary::Solver,
+    layout_lookup: HashMap<cassowary::Variable, dag::Id>,
 }
 
 pub struct Context<'a> {
@@ -187,6 +189,8 @@ impl Ui {
             previous_capture: Capture::None,
             mouse_style: MouseStyle::Arrow,
             mouse_mode: MouseMode::Normal,
+            layout_solver: cassowary::Solver::new(),
+            layout_lookup: HashMap::new(),
         }
     }
 
@@ -285,8 +289,54 @@ impl Ui {
     }
 
     pub fn render(&mut self) -> (DrawList, MouseStyle, MouseMode) {
-        let mut drawlists = vec![];
+        // first, fix the layout
+        let free = &mut self.free;
+        let layout_lookup = &mut self.layout_lookup;
+        let layout_solver = &mut self.layout_solver;
 
+        self.containers
+            .get(&TypeId::of::<Layout>())
+            .and_then(|x| x.downcast_ref::<Container<Layout>>())
+            .map(|container| {
+                let container = container.borrow();
+
+                // remove constraints of removed widgets
+                for (id, _) in free.fetch_recently_freed() {
+                    container[id].0.take().map(|old_layout| {
+                        layout_lookup.remove(&old_layout.left);
+                        layout_lookup.remove(&old_layout.top);
+                        layout_lookup.remove(&old_layout.right);
+                        layout_lookup.remove(&old_layout.bottom);
+                        for c in old_layout.constraints() {
+                            layout_solver.remove_constraint(c);
+                        }
+                    });
+                }
+
+                // apply any changes to the layout
+                for (var, val) in layout_solver.fetch_changes() {
+                    layout_lookup.get(&var).map(|(id, _)| {
+                        let layout = container[*id].0.as_mut().unwrap();
+                        if layout.current.is_none() {
+                            layout.current = Some(Rect::zero());
+                        }
+                        if *var == layout.left {
+                            layout.current.as_mut().unwrap().left = *val as f32;
+                        }
+                        else if *var == layout.right {
+                            layout.current.as_mut().unwrap().right = *val as f32;
+                        }
+                        else if *var == layout.top {
+                            layout.current.as_mut().unwrap().top = *val as f32;
+                        }
+                        else if *var == layout.bottom {
+                            layout.current.as_mut().unwrap().bottom = *val as f32;
+                        }
+                    });
+                }
+            });
+
+        // Sort windows by layer, indepently of last clicked sorting
         self.windows.sort_by(|a,b| {
             let a = match &a.layer {
                 WindowLayer::Back => 0,
@@ -301,7 +351,10 @@ impl Ui {
             a.cmp(&b)
         });
 
+        // Dispatch render systems
         let mut windows = replace(&mut self.windows, vec![]);
+
+        let mut drawlists = vec![];
 
         for win in windows.iter_mut() {
             let tree = win.tree.as_mut().unwrap();
@@ -311,12 +364,16 @@ impl Ui {
             }
         }
 
+        // Remove unused windows
         windows.retain(|win| win.used >= self.iteration);
 
         self.windows = windows;
 
+        // Increase the iteration count. This is used to detect removal of windows and widgets
+        //  in the next frame.
         self.iteration += 1;
 
+        // Convert high level drawlist to a lower level format.
         let drawlist = self.render_internal(drawlists);
 
         (drawlist, self.mouse_style, self.mouse_mode)
@@ -328,14 +385,32 @@ impl Ui {
     }
 
     pub fn create_component<T: 'static + Clone>(&mut self, (id, gen): dag::Id, value: T) {
-        let container: &mut _ = self.containers
+        let container = self.containers
             .entry(TypeId::of::<T>())
-            .or_insert_with(|| Box::new(Container::<T>::new(RefCell::new(Vec::<(Option<T>, usize)>::new()))))
-            .downcast_mut::<Container<T>>()
-            .unwrap();
+            .or_insert_with(|| Box::new(Container::<T>::new(RefCell::new(Vec::<(Option<T>, usize)>::new()))));
 
-        container.borrow_mut().resize(self.free.len(), (None, 0));
-        container.borrow_mut()[id] = (Some(value), gen);
+        {
+            let container: &mut _ = container
+                .downcast_mut::<Container<T>>()
+                .unwrap();
+
+            container.borrow_mut().resize(self.free.len(), (None, 0));
+            container.borrow_mut()[id] = (Some(value), gen);
+        }
+
+        if TypeId::of::<T>() == TypeId::of::<Layout>() {
+            let container: &mut _ = container
+                .downcast_mut::<Container<Layout>>()
+                .unwrap();
+            let container = container.borrow();
+
+            let new_layout = container[id].0.as_ref().unwrap();
+            self.layout_lookup.insert(new_layout.left, (id, gen));
+            self.layout_lookup.insert(new_layout.top, (id, gen));
+            self.layout_lookup.insert(new_layout.right, (id, gen));
+            self.layout_lookup.insert(new_layout.bottom, (id, gen));
+            self.layout_solver.add_constraints(new_layout.constraints());
+        }        
     }
 
     pub fn component<T: 'static + Clone>(&self, (id, gen): dag::Id) -> Option<FetchComponent<T>> {
@@ -516,8 +591,8 @@ impl<'a> Drop for Context<'a> {
                 self.parent.component(id).map(|layout: FetchComponent<Layout>| {
                     let layout = layout.borrow();
                     win_rect = win_rect
-                        .and_then(|r| layout.current.map(|layout| layout.union(r)))
-                        .or(layout.current);
+                        .and_then(|r| layout.current().map(|layout| layout.union(r)))
+                        .or(layout.current().map(|&r| r));
                 });
             }
 

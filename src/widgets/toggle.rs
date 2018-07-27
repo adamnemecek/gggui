@@ -42,19 +42,17 @@ impl<T: Clone+PartialEq> WidgetBase for Toggle<T> {
             click: Background::None,
         };
 
-        let layout = Layout{
-            margin: Rect{ left: 4.0, top: 4.0, right: 4.0, bottom: 4.0 },
-            padding: Rect::zero(),
-            current: Some(if self.radio {
-                style.radio_normal.size
-            } else {
-                style.checkbox_normal.size
-            }),
-            constraints: (Constraint::Fixed, Constraint::Fixed),
-            gravity: (Gravity::Begin, Gravity::Begin),
-        };
-
-        world.create_component(id, layout);
+        if self.radio {
+            world.create_component(id, Layout::new()
+                .with_intrinsic_size_constraints(
+                    style.radio_normal.size.width(), 
+                    style.radio_normal.size.height(), 252.0));
+        } else {
+            world.create_component(id, Layout::new()
+                .with_intrinsic_size_constraints(
+                    style.checkbox_normal.size.width(), 
+                    style.checkbox_normal.size.height(), 252.0));
+        }        
         world.create_component(id, background);
         world.create_component(id, Clickable::Idle);
     }
