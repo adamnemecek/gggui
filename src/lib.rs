@@ -140,7 +140,7 @@ pub struct Context<'a> {
     id: &'a str,
     source: Option<String>,
     widgets: Vec<(dag::Id, Box<'a + WidgetBase>)>,
-    window: Viewport,
+    window: Option<Rect>,
 }
 
 pub struct WidgetResult<'a, T: 'a + Widget> {
@@ -266,16 +266,10 @@ impl Ui {
 
         self.tree_stack.push(tree.unwrap());
 
-        let viewport = Viewport {
-            child_rect: self.viewport,
-
-            // check if the current window is visible right under the cursor.
-            // if it is not, the input rect will be unavailable!
-            input_rect: if self.active_window == id {
-                Some(self.viewport)
-            } else {
-                None
-            },
+        let window = if self.active_window == id {
+            Some(self.viewport)
+        } else {
+            None
         };
 
         Context {
@@ -284,21 +278,22 @@ impl Ui {
             id,
             source: None,
             widgets: vec![],
-            window: viewport,
+            window,
         }
     }
 
     pub fn render(&mut self) -> (DrawList, MouseStyle, MouseMode) {
         // first, fix the layout
-        let free = &mut self.free;
-        let layout_lookup = &mut self.layout_lookup;
-        let layout_solver = &mut self.layout_solver;
+        {
+            let free = &mut self.free;
+            let layout_lookup = &mut self.layout_lookup;
+            let layout_solver = &mut self.layout_solver;
 
-        self.containers
+            self.containers
             .get(&TypeId::of::<Layout>())
             .and_then(|x| x.downcast_ref::<Container<Layout>>())
             .map(|container| {
-                let container = container.borrow();
+                let mut container = container.borrow_mut();
 
                 // remove constraints of removed widgets
                 for (id, _) in free.fetch_recently_freed() {
@@ -335,6 +330,7 @@ impl Ui {
                     });
                 }
             });
+        }
 
         // Sort windows by layer, indepently of last clicked sorting
         self.windows.sort_by(|a,b| {
@@ -398,19 +394,19 @@ impl Ui {
             container.borrow_mut()[id] = (Some(value), gen);
         }
 
-        if TypeId::of::<T>() == TypeId::of::<Layout>() {
-            let container: &mut _ = container
-                .downcast_mut::<Container<Layout>>()
-                .unwrap();
-            let container = container.borrow();
+        let lookup = &mut self.layout_lookup;
+        let solver = &mut self.layout_solver;
 
-            let new_layout = container[id].0.as_ref().unwrap();
-            self.layout_lookup.insert(new_layout.left, (id, gen));
-            self.layout_lookup.insert(new_layout.top, (id, gen));
-            self.layout_lookup.insert(new_layout.right, (id, gen));
-            self.layout_lookup.insert(new_layout.bottom, (id, gen));
-            self.layout_solver.add_constraints(new_layout.constraints());
-        }        
+        container.downcast_ref::<Container<Layout>>().map(|layouts| {
+            let layouts = layouts.borrow();
+
+            let new_layout = layouts[id].0.as_ref().unwrap();
+            lookup.insert(new_layout.left, (id, gen));
+            lookup.insert(new_layout.top, (id, gen));
+            lookup.insert(new_layout.right, (id, gen));
+            lookup.insert(new_layout.bottom, (id, gen));
+            solver.add_constraints(new_layout.constraints());
+        });     
     }
 
     pub fn component<T: 'static + Clone>(&self, (id, gen): dag::Id) -> Option<FetchComponent<T>> {
@@ -516,7 +512,7 @@ impl<'a> Drop for Context<'a> {
                         cursor: MousePosition { 
                             x: self.parent.cursor.0, 
                             y: self.parent.cursor.1, 
-                            visibility: self.window.input_rect 
+                            visibility: self.window 
                         },
                         style: self.parent.mouse_style,
                         mode: self.parent.mouse_mode,
@@ -599,7 +595,7 @@ impl<'a> Drop for Context<'a> {
             let id = self.id;
             let win = self.parent.windows.iter_mut().rev().find(|win| win.id == id).unwrap();
             win.tree = Some(tree);
-            win.rect = win_rect.unwrap();
+            win.rect = win_rect.unwrap_or(Rect::zero());
         }
     }
 }

@@ -1,37 +1,47 @@
 use super::*;
 
+pub mod frame;
 pub mod label;
 pub mod button;
 pub mod toggle;
-pub mod linear;
-pub mod scroll;
+//pub mod linear;
+//pub mod scroll;
 pub mod input;
 pub mod window;
 pub mod menu;
 
+pub use self::frame::*;
 pub use self::label::*;
 pub use self::button::*;
 pub use self::toggle::*;
-pub use self::linear::*;
-pub use self::scroll::*;
+//pub use self::linear::*;
+//pub use self::scroll::*;
 pub use self::input::*;
 pub use self::window::*;
 pub use self::menu::*;
 
-#[derive(Clone)]
-pub struct Viewport {
-    pub child_rect: Rect,
-    pub input_rect: Option<Rect>,
-}
-
 pub trait WidgetBase {
-    fn tabstop(&self) -> bool { false }
-    fn enabled(&self, dag::Id, &Ui) -> bool { true }
-    fn autofocus(&self, dag::Id) -> bool { false }
+    fn tabstop(&self) -> bool { 
+        false 
+    }
 
-    fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style);
-    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, window: Viewport) -> Viewport;
-    fn event(&mut self, _id: dag::Id, _world: &Ui, _style: &Style, _context: &mut EventSystemContext) { }
+    fn enabled(&self, _id: dag::Id, _world: &Ui) -> bool { 
+        true 
+    }
+
+    fn autofocus(&self, _id: dag::Id) -> bool { 
+        false 
+    }
+
+    fn create(&mut self, _id: dag::Id, _world: &mut Ui, _style: &Style) {
+    }
+
+    fn update(&mut self, _id: dag::Id, _world: &Ui, _style: &Style, _input: Option<Rect>) -> Option<Rect> {
+        None
+    }
+
+    fn event(&mut self, _id: dag::Id, _world: &Ui, _style: &Style, _context: &mut EventSystemContext) { 
+    }
 }
 
 pub trait Widget: WidgetBase {

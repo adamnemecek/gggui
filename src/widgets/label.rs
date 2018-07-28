@@ -61,7 +61,7 @@ impl<'a> WidgetBase for Label<'a> {
         world.create_component(id, text);
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, _style: &Style, _window: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &Ui, _style: &Style, _input: Option<Rect>) -> Option<Rect> {
         let mut text = world.component::<Text>(id).unwrap();
         let mut text = text.borrow_mut();
 
@@ -71,10 +71,7 @@ impl<'a> WidgetBase for Label<'a> {
             layout.borrow_mut().current = Some(text.measure(None));
         }
 
-        Viewport {
-            child_rect: Rect::zero(),
-            input_rect: None,
-        }
+        None
     }
 }
 

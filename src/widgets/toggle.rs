@@ -57,7 +57,7 @@ impl<T: Clone+PartialEq> WidgetBase for Toggle<T> {
         world.create_component(id, Clickable::Idle);
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, _window: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, _input: Option<Rect>) -> Option<Rect> {
         let mut clickable = world.component::<Clickable>(id).unwrap();
         let mut clickable = clickable.borrow_mut();
 
@@ -100,10 +100,7 @@ impl<T: Clone+PartialEq> WidgetBase for Toggle<T> {
             x => x,
         };
 
-        Viewport {
-            child_rect: Rect::zero(),
-            input_rect: None,
-        }
+        None
     }
 }
 

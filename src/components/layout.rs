@@ -96,8 +96,10 @@ impl Layout {
         self
     }
 
-    pub fn with_constraints<F: FnOnce(&mut Layout)->Vec<cassowary::Constraint>>(&mut self, f: F) {
-        self.constraints.append(&mut f(self));
+    pub fn with_constraints<F: FnOnce(&mut Layout)->Vec<cassowary::Constraint>>(mut self, f: F) -> Self {
+        let mut new = f(&mut self);
+        self.constraints.append(&mut new);
+        self
     }
 
     pub fn current<'a>(&'a self) -> Option<&'a Rect> {

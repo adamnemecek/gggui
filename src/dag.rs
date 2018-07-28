@@ -32,6 +32,8 @@ impl FreeList {
     pub fn push(&mut self, (x, gen): Id) {
         self.free.push((x, gen+1));
         self.recently_freed.push((x, gen));
+
+        println!("free {:?}", x);
     }
 
     pub fn pop(&mut self) -> Id {

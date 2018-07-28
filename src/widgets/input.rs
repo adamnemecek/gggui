@@ -59,14 +59,7 @@ impl<'a> WidgetBase for Input<'a> {
             click: Background::Patch(style.input.clone(), 1.0),
         });
     }
-
-    fn update(&mut self, _id: dag::Id, _world: &Ui, _style: &Style, _window: Viewport) -> Viewport {
-        Viewport {
-            child_rect: Rect::from_wh(0.0, 0.0),
-            input_rect: None,
-        }
-    }
-
+    
     fn event(&mut self, id: dag::Id, world: &Ui, style: &Style, context: &mut EventSystemContext) {
         let mut layout = world.component::<Layout>(id).unwrap();
         let mut layout = layout.borrow_mut();

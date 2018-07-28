@@ -41,7 +41,7 @@ impl WidgetBase for Button {
         world.create_component(id, Clickable::Idle);
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, _style: &Style, window: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &Ui, _style: &Style, _input: Option<Rect>) -> Option<Rect> {
         let mut clickable = world.component::<Clickable>(id).unwrap();
         let mut clickable = clickable.borrow_mut();
 
@@ -53,10 +53,7 @@ impl WidgetBase for Button {
             x => x,
         };
 
-        Viewport {
-            child_rect: Rect::zero(),
-            input_rect: None,
-        }
+        None
     }
 }
 

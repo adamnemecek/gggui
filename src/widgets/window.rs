@@ -1,4 +1,6 @@
 use super::*;
+use cassowary::strength::*;
+use cassowary::WeightedRelation::*;
 
 #[derive(Clone)]
 pub enum WindowState {
@@ -39,7 +41,14 @@ impl Window {
 
 impl WidgetBase for Window {
     fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style) {
-        world.create_component(id, Layout::new().with_margins(style.window.margin()));
+        println!("create window");
+
+        world.create_component(id, Layout::new()
+            .with_margins(style.window.margin())
+            .with_constraints(|layout| vec![
+                layout.width |GE(REQUIRED)| self.min_size.width() as f64,
+                layout.height |GE(REQUIRED)| self.min_size.height() as f64
+            ]));
         world.create_component(id, WidgetBackground{
             normal: Background::Patch(style.window.clone(), 1.0),
             hover: Background::Patch(style.window.clone(), 1.0),
@@ -48,17 +57,14 @@ impl WidgetBase for Window {
         world.create_component(id, WindowState::Idle);
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, window: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, input: Option<Rect>) -> Option<Rect> {
         let layout = world.component::<Layout>(id).unwrap();     
 
         let content = layout.borrow().current
             .map(|rect| style.window.content_rect(rect))
             .unwrap_or(Rect::zero());
 
-        Viewport {
-            child_rect: content,
-            input_rect: window.input_rect.and_then(|ir| ir.intersect(&content)),
-        }
+        input.and_then(|ir| ir.intersect(&content))
     }
 
     fn event(&mut self, id: dag::Id, world: &Ui, style: &Style, context: &mut EventSystemContext) {
@@ -67,6 +73,10 @@ impl WidgetBase for Window {
 
         let mut state = world.component::<WindowState>(id).unwrap();
         let mut state = state.borrow_mut();
+
+        if layout.current.is_none() {
+            return;
+        }
 
         let mut rect = layout.current.unwrap();
 
