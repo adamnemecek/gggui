@@ -14,11 +14,8 @@ mod feature {
 
     use gfx;
     use glutin;
-    use std::rc::Rc;
-    use std::cell::RefCell;
     use gfx::Device;
     use glutin::GlContext;
-    use glutin::GlWindow;
 
     use gggui::*;
     use gggui::features::gfx::Renderer as UiRenderer;
