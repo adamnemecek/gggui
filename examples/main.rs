@@ -35,12 +35,18 @@ mod feature {
             ui.add("", Window::new(Rect::from_wh(256.0, 256.0), true)).with(|ui| {
                 ui.add("b1", Button::new().with_size((128.0, 32.0)));
                 ui.add("b2", Button::new().with_size((128.0, 32.0)));
+                ui.add("cb", Toggle::checkbox(false, true, false));
+                ui.add("txt", Label::simple("this is a checkbox"));
 
                 ui.rules(|var| vec![
                     var("b1.center_x") |EQ(REQUIRED)| var("super.center_x"),
                     var("b2.center_x") |EQ(REQUIRED)| var("super.center_x"),
                     var("b1.top") |EQ(REQUIRED)| var("super.margin_top"),
                     var("b2.top") |EQ(REQUIRED)| var("b1.bottom") + 8.0,
+                    var("txt.top") |EQ(REQUIRED)| var("b2.bottom") + 8.0,
+                    var("txt.left") |EQ(REQUIRED)| var("cb.right") + 8.0,
+                    var("txt.bottom") |EQ(REQUIRED)| var("cb.bottom"),
+                    var("cb.left") |EQ(REQUIRED)| var("b2.left"),
                 ]);
             });
         });
@@ -142,6 +148,6 @@ mod feature {
 mod feature {
     pub fn demo() {
         println!("This example requires the `winit-events` feature and the `gfx-renderer` feature. \
-                 Try running `cargo run --release --no-default-features --features=\"winit-events gfx-renderer\" --example <example_name>`");
+                 Try running `cargo run --release --features=\"winit-events gfx-renderer\" --example <example_name>`");
    }
 }
