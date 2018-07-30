@@ -64,6 +64,10 @@ impl<'a> WidgetBase for Input<'a> {
         let mut layout = world.component::<Layout>(id).unwrap();
         let mut layout = layout.borrow_mut();
 
+        if layout.current.is_none() {
+            return;
+        }
+
         let current = layout.current.unwrap();
         let content = style.input.content_rect(current);
 

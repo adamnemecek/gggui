@@ -30,23 +30,52 @@ mod feature {
     type ColorFormat = gfx::format::Srgba8;
     type DepthFormat = gfx::format::DepthStencil;
 
-    pub fn demo_frame(style: &Style, ui: &mut Ui) {
+    pub struct State {
+        pub name: String,
+        pub pass: String,
+        pub remember: bool,
+    }
+
+    pub fn demo_frame(style: &Style, ui: &mut Ui, state: &mut State) {
         ui.layer(style, "test", Layer::Normal).with(|ui| {
             ui.add("", Window::new(Rect::from_wh(256.0, 256.0), true)).with(|ui| {
+                ui.add("name_txt", Label::simple("Username: "));
+                ui.add("name", Input::new(&mut state.name));
+                ui.add("pass_txt", Label::simple("Password: "));
+                ui.add("pass", Input::password(&mut state.pass));
                 ui.add("b1", Button::new().with_size((128.0, 32.0)));
                 ui.add("b2", Button::new().with_size((128.0, 32.0)));
-                ui.add("cb", Toggle::checkbox(false, true, false));
-                ui.add("txt", Label::simple("this is a checkbox"));
+                state.remember = ui.add("cb", Toggle::checkbox(state.remember, true, false)).result.unwrap_or(state.remember);
+                ui.add("txt", Label::simple("Remember me"));
 
                 ui.rules(|var| vec![
-                    var("b1.center_x") |EQ(REQUIRED)| var("super.center_x"),
-                    var("b2.center_x") |EQ(REQUIRED)| var("super.center_x"),
-                    var("b1.top") |EQ(REQUIRED)| var("super.margin_top"),
-                    var("b2.top") |EQ(REQUIRED)| var("b1.bottom") + 8.0,
-                    var("txt.top") |EQ(REQUIRED)| var("b2.bottom") + 8.0,
+                    var("name.right") |EQ(REQUIRED)| var("super.margin_right") - 20.0,
+                    var("name.left") |EQ(REQUIRED)| var("name_txt.right"),
+                    var("name.top") |EQ(REQUIRED)| var("super.margin_top") + 20.0,
+                    var("name_txt.left") |EQ(REQUIRED)| var("super.margin_left") + 20.0,
+                    var("name_txt.bottom") |EQ(REQUIRED)| var("name.margin_bottom"),
+
+                    var("pass.right") |EQ(REQUIRED)| var("super.margin_right") - 20.0,
+                    var("pass.left") |EQ(REQUIRED)| var("pass_txt.right"),
+                    var("pass.top") |EQ(REQUIRED)| var("name.bottom") + 8.0,
+                    var("pass_txt.left") |EQ(REQUIRED)| var("super.margin_left") + 20.0,
+                    var("pass_txt.bottom") |EQ(REQUIRED)| var("pass.margin_bottom"),
+
+                    var("name.left") |EQ(REQUIRED)| var("pass.left"),
+                    var("name.left") |EQ(REQUIRED)| var("txt.left"),
+
+                    var("txt.top") |EQ(REQUIRED)| var("pass.bottom") + 8.0,
                     var("txt.left") |EQ(REQUIRED)| var("cb.right") + 8.0,
                     var("txt.bottom") |EQ(REQUIRED)| var("cb.bottom"),
-                    var("cb.left") |EQ(REQUIRED)| var("b2.left"),
+
+                    var("b1.left") |EQ(REQUIRED)| var("super.margin_left") + 20.0,
+                    var("b1.top") |EQ(REQUIRED)| var("cb.bottom") + 8.0,
+                    var("b2.top") |EQ(REQUIRED)| var("b1.top"),
+                    var("b2.left") |EQ(REQUIRED)| var("b1.right") + 8.0,
+                    var("b2.width") |EQ(REQUIRED)| var("b1.width"),
+                    var("b2.right") |EQ(REQUIRED)| var("super.margin_right") - 20.0,
+
+                    
                 ]);
             });
         });
@@ -85,6 +114,12 @@ mod feature {
         let mut finished = false;
 
         let style = Style::default(&mut ui);
+
+        let mut state = State {
+            name: "".to_string(),
+            pass: "".to_string(),
+            remember: false,
+        };
 
         while !finished {
             let mut ui_events = vec![];
@@ -128,7 +163,7 @@ mod feature {
             ui.update(viewport, ui_events.into());
 
             // process the ui
-            demo_frame(&style, &mut ui);
+            demo_frame(&style, &mut ui, &mut state);
 
             // render ui
             encoder.clear(&main_color, [0.3, 0.3, 0.3, 1.0]);
