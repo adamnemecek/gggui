@@ -31,7 +31,7 @@ mod feature {
     type DepthFormat = gfx::format::DepthStencil;
 
     pub fn demo_frame(style: &Style, ui: &mut Ui) {
-        ui.window(style, "test", WindowLayer::Normal).with(|ui| {
+        ui.layer(style, "test", Layer::Normal).with(|ui| {
             ui.add("", Window::new(Rect::from_wh(256.0, 256.0), true)).with(|ui| {
                 ui.add("b1", Button::new().with_size((128.0, 32.0)));
                 ui.add("b2", Button::new().with_size((128.0, 32.0)));

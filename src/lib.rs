@@ -95,24 +95,24 @@ impl MousePosition {
 }
 
 #[derive(PartialEq)]
-pub enum WindowLayer {
+pub enum Layer {
     Back,
     Normal,
     Modal
 }
 
-struct UiWindow {
+struct UiLayer {
     id: String,
     tree: Option<dag::Tree>,
     used: usize,
-    layer: WindowLayer,
+    layer: Layer,
     rect: Rect,
 }
 
 pub struct Ui {
     iteration: usize,
     focus: Option<dag::Id>,
-    windows: Vec<UiWindow>,
+    layers: Vec<UiLayer>,
     tree_stack: Vec<dag::Tree>,
     free: dag::FreeList,
     containers: HashMap<TypeId, Box<Any>>,
@@ -125,7 +125,7 @@ pub struct Ui {
     tabstop_focus_id: Option<dag::Id>,
     pub viewport: Rect,
     pub cursor: (f32, f32),
-    active_window: String,
+    active_layer: String,
     capture: Capture,
     previous_capture: Capture,
     mouse_style: MouseStyle,
@@ -172,7 +172,7 @@ impl Ui {
         Self {
             iteration: 1,
             focus: None,
-            windows: vec![],
+            layers: vec![],
             tree_stack: vec![],
             free: dag::FreeList::new(),
             containers: HashMap::new(),
@@ -185,7 +185,7 @@ impl Ui {
             tabstop_focus_id: None,
             viewport: Rect::from_wh(0.0, 0.0),
             cursor: (0.0, 0.0),
-            active_window: String::from(""),
+            active_layer: String::from(""),
             capture: Capture::None,
             previous_capture: Capture::None,
             mouse_style: MouseStyle::Arrow,
@@ -226,8 +226,8 @@ impl Ui {
         }
 
         let mut no_modal_found = true;
-        self.active_window = self.windows.iter().rev().find(|x| {
-            if x.layer == WindowLayer::Modal {
+        self.active_layer = self.layers.iter().rev().find(|x| {
+            if x.layer == Layer::Modal {
                 no_modal_found =  false;
                 true
             } else {
@@ -240,22 +240,22 @@ impl Ui {
         }).map(|x| x.id.clone()).unwrap_or("".to_string());
     }
 
-    pub fn window<'a>(&'a mut self, style: &'a Style, id: &'a str, layer: WindowLayer) -> Context<'a> {
+    pub fn layer<'a>(&'a mut self, style: &'a Style, id: &'a str, layer: Layer) -> Context<'a> {
         let mut tree = None;
         
         // find window
-        for win in self.windows.iter_mut() {
-            if win.id == id {
-                assert!(win.tree.is_some());
-                win.used = self.iteration;
-                tree = win.tree.take();
+        for ly in self.layers.iter_mut() {
+            if ly.id == id {
+                assert!(ly.tree.is_some());
+                ly.used = self.iteration;
+                tree = ly.tree.take();
                 break;
             }
         }
 
         // window not found? make a new one
         let is_new = if tree.is_none() {
-            self.windows.push(UiWindow {
+            self.layers.push(UiLayer {
                 id: id.to_string(),
                 tree: None,
                 used: self.iteration,
@@ -271,7 +271,7 @@ impl Ui {
 
         self.tree_stack.push(tree.unwrap());
 
-        let window = if self.active_window == id {
+        let window = if self.active_layer == id {
             Some(self.viewport)
         } else {
             None
@@ -343,26 +343,26 @@ impl Ui {
         }
 
         // Sort windows by layer, indepently of last clicked sorting
-        self.windows.sort_by(|a,b| {
+        self.layers.sort_by(|a,b| {
             let a = match &a.layer {
-                WindowLayer::Back => 0,
-                WindowLayer::Normal => 1,
-                WindowLayer::Modal => 2,
+                Layer::Back => 0,
+                Layer::Normal => 1,
+                Layer::Modal => 2,
             };
             let b = match &b.layer {
-                WindowLayer::Back => 0,
-                WindowLayer::Normal => 1,
-                WindowLayer::Modal => 2,
+                Layer::Back => 0,
+                Layer::Normal => 1,
+                Layer::Modal => 2,
             };
             a.cmp(&b)
         });
 
         // Dispatch render systems
-        let mut windows = replace(&mut self.windows, vec![]);
+        let mut layers = replace(&mut self.layers, vec![]);
 
         let mut drawlists = vec![];
 
-        for win in windows.iter_mut() {
+        for win in layers.iter_mut() {
             let tree = win.tree.as_mut().unwrap();
             tree.cleanup(self.iteration, &mut self.free);
             if win.used >= self.iteration {
@@ -370,12 +370,12 @@ impl Ui {
             }
         }
 
-        // Remove unused windows
-        windows.retain(|win| win.used >= self.iteration);
+        // Remove unused layers
+        layers.retain(|ly| ly.used >= self.iteration);
 
-        self.windows = windows;
+        self.layers = layers;
 
-        // Increase the iteration count. This is used to detect removal of windows and widgets
+        // Increase the iteration count. This is used to detect removal of layers and widgets
         //  in the next frame.
         self.iteration += 1;
 
@@ -619,12 +619,12 @@ impl<'a> Drop for Context<'a> {
 
         // if the window is activated, move it to the back of the window vec
         if activate_window {
-            let mut i = self.parent.windows.len() - 1;
+            let mut i = self.parent.layers.len() - 1;
             loop {
-                if self.parent.windows[i].id == self.id {
-                    if self.parent.windows[i].layer != WindowLayer::Back {
-                        let w = self.parent.windows.remove(i);
-                        self.parent.windows.push(w);
+                if self.parent.layers[i].id == self.id {
+                    if self.parent.layers[i].layer != Layer::Back {
+                        let w = self.parent.layers.remove(i);
+                        self.parent.layers.push(w);
                     }
                     break;
                 }
@@ -643,20 +643,20 @@ impl<'a> Drop for Context<'a> {
         } else {
             assert!(self.parent.tree_stack.len() == 0);
 
-            let mut win_rect = None;
+            let mut layer_rect = None;
             for (id, _) in widgets {
                 self.parent.component(id).map(|layout: FetchComponent<Layout>| {
                     let layout = layout.borrow();
-                    win_rect = win_rect
+                    layer_rect = layer_rect
                         .and_then(|r| layout.current().map(|layout| layout.union(r)))
                         .or(layout.current().map(|&r| r));
                 });
             }
 
             let id = self.id;
-            let win = self.parent.windows.iter_mut().rev().find(|win| win.id == id).unwrap();
-            win.tree = Some(tree);
-            win.rect = win_rect.unwrap_or(Rect::zero());
+            let ly = self.parent.layers.iter_mut().rev().find(|ly| ly.id == id).unwrap();
+            ly.tree = Some(tree);
+            ly.rect = layer_rect.unwrap_or(Rect::zero());
         }
     }
 }
