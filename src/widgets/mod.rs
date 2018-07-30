@@ -36,11 +36,11 @@ pub trait WidgetBase {
     fn create(&mut self, _id: dag::Id, _world: &mut Ui, _style: &Style) {
     }
 
-    fn update(&mut self, _id: dag::Id, _world: &Ui, _style: &Style, _input: Option<Rect>) -> Option<Rect> {
+    fn update(&mut self, _id: dag::Id, _world: &mut Ui, _style: &Style, _input: Option<Rect>) -> Option<Rect> {
         None
     }
 
-    fn event(&mut self, _id: dag::Id, _world: &Ui, _style: &Style, _context: &mut EventSystemContext) { 
+    fn event(&mut self, _id: dag::Id, _world: &mut Ui, _style: &Style, _context: &mut EventSystemContext) { 
     }
 }
 

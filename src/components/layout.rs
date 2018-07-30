@@ -73,6 +73,14 @@ impl Layout {
         }
     }
 
+    pub fn as_editable(self, solver: &mut cassowary::Solver) -> Self {
+        solver.add_edit_variable(self.left, STRONG);
+        solver.add_edit_variable(self.top, STRONG);
+        solver.add_edit_variable(self.right, STRONG);
+        solver.add_edit_variable(self.bottom, STRONG);
+        self
+    }
+
     pub fn with_margins(mut self, margin: Rect) -> Self {
         self.constraints[4] = self.margin_left |EQ(REQUIRED)| self.left + margin.left as f64;
         self.constraints[5] = self.margin_right |EQ(REQUIRED)| self.right - margin.right as f64;

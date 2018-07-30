@@ -1,5 +1,6 @@
 use std::mem::replace;
 use std::collections::HashMap;
+use cassowary;
 
 pub type Id = (usize, usize);
 
@@ -10,12 +11,15 @@ pub struct Item {
 }
 
 pub struct Tree {
+    pub vars: HashMap<String, cassowary::Variable>,
+    pub rules: Vec<cassowary::Constraint>,
     pub ids: HashMap<String, Item>,
     pub ord: Vec<Id>,
 }
 
 pub struct FreeList {
-    recently_freed: Vec<Id>,
+    recently_freed_ids: Vec<Id>,
+    recently_freed_constraints: Vec<cassowary::Constraint>,
     free: Vec<Id>,
     next: usize,
 }
@@ -24,14 +28,16 @@ impl FreeList {
     pub fn new() -> Self {
         Self {
             free: vec![],
-            recently_freed: vec![],
+            recently_freed_ids: vec![],
+            recently_freed_constraints: vec![],
             next: 0
         }
     }
 
-    pub fn push(&mut self, (x, gen): Id) {
+    pub fn push(&mut self, (x, gen): Id, mut constraints: Vec<cassowary::Constraint>) {
         self.free.push((x, gen+1));
-        self.recently_freed.push((x, gen));
+        self.recently_freed_ids.push((x, gen));
+        self.recently_freed_constraints.append(&mut constraints);
 
         println!("free {:?}", x);
     }
@@ -43,8 +49,12 @@ impl FreeList {
         })
     }
 
-    pub fn fetch_recently_freed(&mut self) -> Vec<Id> {
-        replace(&mut self.recently_freed, vec![])
+    pub fn fetch_recently_freed_ids(&mut self) -> Vec<Id> {
+        replace(&mut self.recently_freed_ids, vec![])
+    }
+
+    pub fn fetch_recently_freed_constraints(&mut self) -> Vec<cassowary::Constraint> {
+        replace(&mut self.recently_freed_constraints, vec![])
     }
 
     pub fn len(&self) -> usize {
@@ -55,6 +65,8 @@ impl FreeList {
 impl Tree {
     pub fn new() -> Self {
         Tree {
+            vars: HashMap::new(),
+            rules: Vec::new(),
             ids: HashMap::new(),
             ord: Vec::new(),
         }
@@ -66,7 +78,11 @@ impl Tree {
             if v.used >= before {
                 true
             } else { 
-                free_list.push(v.id);
+                free_list.push(v.id, v.subs
+                    .as_mut()
+                    .map(|t| replace(&mut t.rules, vec![]))
+                    .unwrap_or(vec![])
+                );
                 false
             }
         });

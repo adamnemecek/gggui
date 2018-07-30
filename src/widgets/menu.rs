@@ -35,7 +35,7 @@ impl<'a, T:'a> WidgetBase for Menu<'a, T> {
         world.create_component(id, MenuState::Idle);
     }
 
-    fn event(&mut self, id: dag::Id, world: &Ui, _style: &Style, context: &mut EventSystemContext) {
+    fn event(&mut self, id: dag::Id, world: &mut Ui, _style: &Style, context: &mut EventSystemContext) {
         let mut state = world.component::<MenuState>(id).unwrap();
         let mut state = state.borrow_mut();
 

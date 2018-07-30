@@ -43,12 +43,17 @@ impl WidgetBase for Window {
     fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style) {
         println!("create window");
 
-        world.create_component(id, Layout::new()
+        let layout = Layout::new()
             .with_margins(style.window.margin())
             .with_constraints(|layout| vec![
+                layout.top |GE(REQUIRED)| 0.0,
+                layout.left |GE(REQUIRED)| 0.0,
                 layout.width |GE(REQUIRED)| self.min_size.width() as f64,
                 layout.height |GE(REQUIRED)| self.min_size.height() as f64
-            ]));
+            ])
+            .as_editable(&mut world.layout_solver);
+
+        world.create_component(id, layout);
         world.create_component(id, WidgetBackground{
             normal: Background::Patch(style.window.clone(), 1.0),
             hover: Background::Patch(style.window.clone(), 1.0),
@@ -57,7 +62,7 @@ impl WidgetBase for Window {
         world.create_component(id, WindowState::Idle);
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, input: Option<Rect>) -> Option<Rect> {
+    fn update(&mut self, id: dag::Id, world: &mut Ui, style: &Style, input: Option<Rect>) -> Option<Rect> {
         let layout = world.component::<Layout>(id).unwrap();     
 
         let content = layout.borrow().current
@@ -67,7 +72,7 @@ impl WidgetBase for Window {
         input.and_then(|ir| ir.intersect(&content))
     }
 
-    fn event(&mut self, id: dag::Id, world: &Ui, style: &Style, context: &mut EventSystemContext) {
+    fn event(&mut self, id: dag::Id, world: &mut Ui, style: &Style, context: &mut EventSystemContext) {
         let mut layout = world.component::<Layout>(id).unwrap();
         let mut layout = layout.borrow_mut();
 
@@ -150,7 +155,10 @@ impl WidgetBase for Window {
                 context.capture = Capture::CaptureFocus(MouseStyle::Arrow);
 
                 if self.draggable {
-                    rect = rect.size().translate(context.cursor.x - x, context.cursor.y - y);
+                    world.layout_solver.suggest_value(layout.left, (context.cursor.x - x) as f64);
+                    world.layout_solver.suggest_value(layout.top, (context.cursor.y - y) as f64);
+                    world.layout_solver.suggest_value(layout.right, (context.cursor.x - x + rect.width()) as f64);
+                    world.layout_solver.suggest_value(layout.bottom, (context.cursor.y - y + rect.height()) as f64);
                 }
 
                 if let Event::Release(Key::LeftMouseButton, _) = context.event {
@@ -167,32 +175,56 @@ impl WidgetBase for Window {
 
                 match anchor {
                     MouseStyle::ResizeN => {
-                        rect.top = context.cursor.y.min(rect.bottom - min_h);
+                        world.layout_solver.suggest_value(
+                            layout.top, 
+                            context.cursor.y.min(rect.bottom - min_h) as f64);
                     },
                     MouseStyle::ResizeS => {
-                        rect.bottom = context.cursor.y.max(rect.top + min_h);
+                        world.layout_solver.suggest_value(
+                            layout.bottom,
+                            context.cursor.y.max(rect.top + min_h) as f64);
                     },
                     MouseStyle::ResizeW => {
-                        rect.left = context.cursor.x.min(rect.right - min_w);
+                        world.layout_solver.suggest_value(
+                            layout.left,
+                            context.cursor.x.min(rect.right - min_w) as f64);
                     },
                     MouseStyle::ResizeE => {
-                        rect.right = context.cursor.x.max(rect.left + min_w);
+                        world.layout_solver.suggest_value(
+                            layout.right,
+                            context.cursor.x.max(rect.left + min_w) as f64);
                     },
                     MouseStyle::ResizeNw => {
-                        rect.top = context.cursor.y.min(rect.bottom - min_h);
-                        rect.left = context.cursor.x.min(rect.right - min_w);
+                        world.layout_solver.suggest_value(
+                            layout.top, 
+                            context.cursor.y.min(rect.bottom - min_h) as f64);
+                        world.layout_solver.suggest_value(
+                            layout.left,
+                            context.cursor.x.min(rect.right - min_w) as f64);
                     },
                     MouseStyle::ResizeNe => {
-                        rect.top = context.cursor.y.min(rect.bottom - min_h);
-                        rect.right = context.cursor.x.max(rect.left + min_w);
+                        world.layout_solver.suggest_value(
+                            layout.top,
+                            context.cursor.y.min(rect.bottom - min_h) as f64);
+                        world.layout_solver.suggest_value(
+                            layout.right,
+                            context.cursor.x.max(rect.left + min_w) as f64);
                     },
                     MouseStyle::ResizeSw => {
-                        rect.bottom = context.cursor.y.max(rect.top + min_h);
-                        rect.left = context.cursor.x.min(rect.right - min_w);
+                        world.layout_solver.suggest_value(
+                            layout.bottom,
+                            context.cursor.y.max(rect.top + min_h) as f64);
+                        world.layout_solver.suggest_value(
+                            layout.left,
+                            context.cursor.x.min(rect.right - min_w) as f64);
                     },
                     MouseStyle::ResizeSe => {
-                        rect.bottom = context.cursor.y.max(rect.top + min_h);
-                        rect.right = context.cursor.x.max(rect.left + min_w);
+                        world.layout_solver.suggest_value(
+                            layout.bottom,
+                            context.cursor.y.max(rect.top + min_h) as f64);
+                        world.layout_solver.suggest_value(
+                            layout.right,
+                            context.cursor.x.max(rect.left + min_w) as f64);
                     },
                     _ => {
                         unreachable!();

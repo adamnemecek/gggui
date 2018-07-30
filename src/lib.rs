@@ -141,6 +141,7 @@ pub struct Context<'a> {
     source: Option<String>,
     widgets: Vec<(dag::Id, Box<'a + WidgetBase>)>,
     window: Option<Rect>,
+    is_new: bool,
 }
 
 pub struct WidgetResult<'a, T: 'a + Widget> {
@@ -253,7 +254,7 @@ impl Ui {
         }
 
         // window not found? make a new one
-        if tree.is_none() {
+        let is_new = if tree.is_none() {
             self.windows.push(UiWindow {
                 id: id.to_string(),
                 tree: None,
@@ -262,7 +263,11 @@ impl Ui {
                 rect: Rect::zero(),
             });
             tree = Some(dag::Tree::new());
-        }
+
+            true
+        } else {
+            false
+        };
 
         self.tree_stack.push(tree.unwrap());
 
@@ -279,6 +284,7 @@ impl Ui {
             source: None,
             widgets: vec![],
             window,
+            is_new,
         }
     }
 
@@ -296,7 +302,7 @@ impl Ui {
                 let mut container = container.borrow_mut();
 
                 // remove constraints of removed widgets
-                for (id, _) in free.fetch_recently_freed() {
+                for (id, _) in free.fetch_recently_freed_ids() {
                     container[id].0.take().map(|old_layout| {
                         layout_lookup.remove(&old_layout.left);
                         layout_lookup.remove(&old_layout.top);
@@ -306,6 +312,10 @@ impl Ui {
                             layout_solver.remove_constraint(c);
                         }
                     });
+                }
+
+                for c in free.fetch_recently_freed_constraints() {
+                    layout_solver.remove_constraint(&c);
                 }
 
                 // apply any changes to the layout
@@ -380,6 +390,19 @@ impl Ui {
         self.tree_stack[top].ord.iter()
     }
 
+    pub fn var(&mut self, id: &str) -> cassowary::Variable {
+        let top = self.tree_stack.len() - 1;
+        let vars = &mut self.tree_stack[top].vars;
+
+        vars.get(id).map(|x| *x).unwrap_or_else(|| {
+            println!("unable to retrieve var {:?}", id);
+            for (k,v) in vars.iter() {
+                println!("available is {:?}/{:?}", k, v);
+            }
+            panic!();
+        })
+    }
+
     pub fn create_component<T: 'static + Clone>(&mut self, (id, gen): dag::Id, value: T) {
         let container = self.containers
             .entry(TypeId::of::<T>())
@@ -429,7 +452,7 @@ impl<'a> Context<'a> {
     //  future iterations.
     // If the widget has children, you must add them through the context in the returned WidgetResult
     pub fn add<'b, T: 'a + Widget>(&'b mut self, id: &str, mut w: T) -> WidgetResult<'b, T> {
-        let (internal_id, create, tree) = {
+        let (internal_id, create, mut tree) = {
             let top = self.parent.tree_stack.len()-1;
             let iteration = self.parent.iteration;
             let tree = &mut self.parent.tree_stack[top];
@@ -444,9 +467,38 @@ impl<'a> Context<'a> {
 
         if create {
             w.create(internal_id, self.parent, self.style);
-        }
+            self.parent.component(internal_id).map(|layout: FetchComponent<Layout>| {
+                let layout = layout.borrow();
+                let top = self.parent.tree_stack.len() - 1;
+                let parent_tree = &mut self.parent.tree_stack[top];
 
-        //tree.ord.clear();
+                tree.vars.insert(String::from("super.left"), layout.left);
+                tree.vars.insert(String::from("super.top"), layout.top);
+                tree.vars.insert(String::from("super.right"), layout.right);
+                tree.vars.insert(String::from("super.bottom"), layout.bottom);
+                tree.vars.insert(String::from("super.margin_left"), layout.margin_left);
+                tree.vars.insert(String::from("super.margin_top"), layout.margin_top);
+                tree.vars.insert(String::from("super.margin_right"), layout.margin_right);
+                tree.vars.insert(String::from("super.margin_bottom"), layout.margin_bottom);
+                tree.vars.insert(String::from("super.width"), layout.width);
+                tree.vars.insert(String::from("super.height"), layout.height);
+                tree.vars.insert(String::from("super.center_x"), layout.center_x);
+                tree.vars.insert(String::from("super.center_y"), layout.center_y);
+
+                parent_tree.vars.insert(format!("{0}.left", id), layout.left);
+                parent_tree.vars.insert(format!("{0}.top", id), layout.top);
+                parent_tree.vars.insert(format!("{0}.right", id), layout.right);
+                parent_tree.vars.insert(format!("{0}.bottom", id), layout.bottom);
+                parent_tree.vars.insert(format!("{0}.margin_left", id), layout.margin_left);
+                parent_tree.vars.insert(format!("{0}.margin_top", id), layout.margin_top);
+                parent_tree.vars.insert(format!("{0}.margin_right", id), layout.margin_right);
+                parent_tree.vars.insert(format!("{0}.margin_bottom", id), layout.margin_bottom);
+                parent_tree.vars.insert(format!("{0}.width", id), layout.width);
+                parent_tree.vars.insert(format!("{0}.height", id), layout.height);
+                parent_tree.vars.insert(format!("{0}.center_x", id), layout.center_x);
+                parent_tree.vars.insert(format!("{0}.center_y", id), layout.center_y);
+            });
+        }
 
         self.parent.tree_stack.push(tree);
 
@@ -465,7 +517,16 @@ impl<'a> Context<'a> {
                 source: Some(id.to_string()),
                 widgets: vec![],
                 window: sub_window,
+                is_new: create,
             }
+        }
+    }
+
+    pub fn rules<F: FnOnce(&mut FnMut(&str)->cassowary::Variable)->Vec<cassowary::Constraint>>(&mut self, rules: F) {
+        if self.is_new {
+            let top = self.parent.tree_stack.len() - 1;
+            self.parent.tree_stack[top].rules = rules(&mut |id| self.parent.var(id));
+            self.parent.layout_solver.add_constraints(self.parent.tree_stack[top].rules.iter());
         }
     }
 

@@ -27,7 +27,7 @@ impl WidgetBase for Frame {
         world.create_component(id, background);
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, _style: &Style, input: Option<Rect>) -> Option<Rect> {
+    fn update(&mut self, id: dag::Id, world: &mut Ui, _style: &Style, input: Option<Rect>) -> Option<Rect> {
         let layout = world.component::<Layout>(id).unwrap();
         let layout = layout.borrow();
         layout.current()

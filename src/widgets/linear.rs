@@ -77,7 +77,7 @@ impl WidgetBase for LinearLayout {
         world.create_component(id, Clipper{ rect: Rect::from_wh(0.0, 0.0), intersect: true });
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, _style: &Style, viewport: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &mut Ui, _style: &Style, viewport: Viewport) -> Viewport {
 
         let mut layout: FetchComponent<Layout> = world.component(id).unwrap();
 

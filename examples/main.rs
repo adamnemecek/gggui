@@ -3,6 +3,8 @@
 #[cfg(feature="winit-events")] extern crate winit;
 #[cfg(feature="gfx-renderer")] extern crate gfx;
 
+extern crate cassowary;
+
 pub fn main() {
     feature::demo()
 }
@@ -11,6 +13,7 @@ pub fn main() {
 mod feature {
     extern crate gfx_window_glutin;
     extern crate gfx_device_gl;
+
 
     use gfx;
     use glutin;
@@ -21,13 +24,24 @@ mod feature {
     use gggui::features::gfx::Renderer as UiRenderer;
     use gggui::features::winit::*;
 
+    use cassowary::strength::*;
+    use cassowary::WeightedRelation::*;
+
     type ColorFormat = gfx::format::Srgba8;
     type DepthFormat = gfx::format::DepthStencil;
 
     pub fn demo_frame(style: &Style, ui: &mut Ui) {
         ui.window(style, "test", WindowLayer::Normal).with(|ui| {
             ui.add("", Window::new(Rect::from_wh(256.0, 256.0), true)).with(|ui| {
-                //
+                ui.add("b1", Button::new().with_size((128.0, 32.0)));
+                ui.add("b2", Button::new().with_size((128.0, 32.0)));
+
+                ui.rules(|var| vec![
+                    var("b1.center_x") |EQ(REQUIRED)| var("super.center_x"),
+                    var("b2.center_x") |EQ(REQUIRED)| var("super.center_x"),
+                    var("b1.top") |EQ(REQUIRED)| var("super.margin_top"),
+                    var("b2.top") |EQ(REQUIRED)| var("b1.bottom") + 8.0,
+                ]);
             });
         });
     }

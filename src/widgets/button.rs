@@ -29,7 +29,7 @@ impl WidgetBase for Button {
             click: Background::Patch(style.button_pressed.clone(), 1.0),
         };
 
-        let size = style.button_normal.minimum_size();
+        let size = self.size.unwrap_or(style.button_normal.minimum_size());
 
         world.create_component(id, Layout::new()
             .with_margins(style.button_normal.margin())
@@ -41,7 +41,7 @@ impl WidgetBase for Button {
         world.create_component(id, Clickable::Idle);
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, _style: &Style, _input: Option<Rect>) -> Option<Rect> {
+    fn update(&mut self, id: dag::Id, world: &mut Ui, _style: &Style, _input: Option<Rect>) -> Option<Rect> {
         let mut clickable = world.component::<Clickable>(id).unwrap();
         let mut clickable = clickable.borrow_mut();
 
