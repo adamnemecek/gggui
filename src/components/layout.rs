@@ -118,3 +118,56 @@ impl Layout {
         self.constraints.as_slice()
     }
 }
+
+#[macro_export]
+macro_rules! layout_rules {
+        // Equations
+        ($lookup:path, [ $a:expr ] = $($rest:tt)*) => {
+            layout_rules!($lookup, [ $a |EQ(REQUIRED)| layout_rules!($lookup, [] $($rest)*)])
+        };
+        ($lookup:path, [ $a:expr ] >= $($rest:tt)*) => {
+            layout_rules!($lookup, [ $a |GE(REQUIRED)| layout_rules!($lookup, [] $($rest)*)])
+        };
+        ($lookup:path, [ $a:expr ] <= $($rest:tt)*) => {
+            layout_rules!($lookup, [ $a |LE(REQUIRED)| layout_rules!($lookup, [] $($rest)*)])
+        };
+
+        // Arithmetic
+        ($lookup:path, [ $a:expr ] + $($rest:tt)*) => {
+            layout_rules!($lookup, [ $a + layout_rules!($lookup, [] $($rest)*)])
+        };
+        ($lookup:path, [ $a:expr ] - $($rest:tt)*) => {
+            layout_rules!($lookup, [ $a - layout_rules!($lookup, [] $($rest)*)])
+        };
+        ($lookup:path, [ $a:expr ] * $($rest:tt)*) => {
+            layout_rules!($lookup, [ $a * layout_rules!($lookup, [] $($rest)*)])
+        };
+        ($lookup:path, [ $a:expr ] / $($rest:tt)*) => {
+            layout_rules!($lookup, [ $a / layout_rules!($lookup, [] $($rest)*)])
+        };
+
+        // Parenthesis dereference
+        ($lookup:path, [ $($stack:expr),* ] ($($rest:tt)*)) => {
+            layout_rules!($lookup, [ $($stack ,)* ] $($rest)*)
+        };
+        
+        // Variable lookup
+        ($lookup:path, [ $($stack:expr),* ] $view:tt.$name:tt $($rest:tt)*) => {
+            layout_rules!($lookup, [ $lookup(&format!("{0}.{1}", stringify!($view), stringify!($name))) $(, $stack)* ] $($rest)*)
+        };
+
+        // Fixed numbers
+        ($lookup:path, [ $($stack:expr),* ] $num:tt $($rest:tt)*) => {
+            layout_rules!($lookup, [ $num $(, $stack)* ] $($rest)*)
+        };
+
+        // Results
+        ($lookup:path, [$result:expr]) => {
+            $result
+        };
+
+        // Entry point
+        ($ui:path, $($tokens:tt,)*) => {
+            $ui.rules(|var| vec![$(layout_rules!(var, [] $tokens)),*])
+        };        
+    }

@@ -41,8 +41,6 @@ impl Window {
 
 impl WidgetBase for Window {
     fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style) {
-        println!("create window");
-
         let layout = Layout::new()
             .with_margins(style.window.margin())
             .with_constraints(|layout| vec![

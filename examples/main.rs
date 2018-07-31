@@ -1,4 +1,4 @@
-#[cfg(feature="winit-events")] extern crate gggui;
+#[cfg(feature="winit-events")] #[macro_use] extern crate gggui;
 #[cfg(feature="winit-events")] extern crate glutin;
 #[cfg(feature="winit-events")] extern crate winit;
 #[cfg(feature="gfx-renderer")] extern crate gfx;
@@ -13,7 +13,6 @@ pub fn main() {
 mod feature {
     extern crate gfx_window_glutin;
     extern crate gfx_device_gl;
-
 
     use gfx;
     use glutin;
@@ -48,35 +47,29 @@ mod feature {
                 state.remember = ui.add("cb", Toggle::checkbox(state.remember, true, false)).result.unwrap_or(state.remember);
                 ui.add("txt", Label::simple("Remember me"));
 
-                ui.rules(|var| vec![
-                    var("name.right") |EQ(REQUIRED)| var("super.margin_right") - 20.0,
-                    var("name.left") |EQ(REQUIRED)| var("name_txt.right"),
-                    var("name.top") |EQ(REQUIRED)| var("super.margin_top") + 20.0,
-                    var("name_txt.left") |EQ(REQUIRED)| var("super.margin_left") + 20.0,
-                    var("name_txt.bottom") |EQ(REQUIRED)| var("name.margin_bottom"),
-
-                    var("pass.right") |EQ(REQUIRED)| var("super.margin_right") - 20.0,
-                    var("pass.left") |EQ(REQUIRED)| var("pass_txt.right"),
-                    var("pass.top") |EQ(REQUIRED)| var("name.bottom") + 8.0,
-                    var("pass_txt.left") |EQ(REQUIRED)| var("super.margin_left") + 20.0,
-                    var("pass_txt.bottom") |EQ(REQUIRED)| var("pass.margin_bottom"),
-
-                    var("name.left") |EQ(REQUIRED)| var("pass.left"),
-                    var("name.left") |EQ(REQUIRED)| var("txt.left"),
-
-                    var("txt.top") |EQ(REQUIRED)| var("pass.bottom") + 8.0,
-                    var("txt.left") |EQ(REQUIRED)| var("cb.right") + 8.0,
-                    var("txt.bottom") |EQ(REQUIRED)| var("cb.bottom"),
-
-                    var("b1.left") |EQ(REQUIRED)| var("super.margin_left") + 20.0,
-                    var("b1.top") |EQ(REQUIRED)| var("cb.bottom") + 8.0,
-                    var("b2.top") |EQ(REQUIRED)| var("b1.top"),
-                    var("b2.left") |EQ(REQUIRED)| var("b1.right") + 8.0,
-                    var("b2.width") |EQ(REQUIRED)| var("b1.width"),
-                    var("b2.right") |EQ(REQUIRED)| var("super.margin_right") - 20.0,
-
-                    
-                ]);
+                layout_rules!(ui, 
+                    (name.right = super.margin_right - 20.0),
+                    (name.left = name_txt.right),
+                    (name.top = super.margin_top + 20.0),
+                    (name_txt.left = super.margin_left + 20.0),
+                    (name_txt.bottom = name.margin_bottom),
+                    (pass.right = super.margin_right - 20.0),
+                    (pass.left = pass_txt.right),
+                    (pass.top = name.bottom + 8.0),
+                    (pass_txt.left = super.margin_left + 20.0),
+                    (pass_txt.bottom = pass.margin_bottom),
+                    (name.left = pass.left),
+                    (name.left = txt.left),
+                    (txt.top = pass.bottom + 8.0),
+                    (txt.left = cb.right + 8.0),
+                    (txt.bottom = cb.bottom),
+                    (b1.left = super.margin_left + 20.0),
+                    (b1.top = cb.bottom + 8.0),
+                    (b2.top = b1.top),
+                    (b2.left = b1.right + 8.0),
+                    (b2.width = b1.width),
+                    (b2.right = super.margin_right - 20.0),
+                );
             });
         });
     }

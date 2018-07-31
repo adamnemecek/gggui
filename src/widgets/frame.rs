@@ -17,7 +17,7 @@ impl Frame {
 }
 
 impl WidgetBase for Frame {
-    fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style) {
+    fn create(&mut self, id: dag::Id, world: &mut Ui, _style: &Style) {
         let background = WidgetBackground{
             normal: self.background.clone(),
             hover: self.background.clone(),
