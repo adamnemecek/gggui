@@ -18,11 +18,17 @@ pub fn new_clip_system() -> (ContentPushClipSystem, ContentPopClipSystem) {
 
 impl System<Vec<Primitive>> for ContentPushClipSystem {
     type Components = (
-        FetchComponent<Clipper>
+        FetchComponent<Clipper>,
+        Option<FetchComponent<Layout>>,
     );
-    fn run(&self, drawlist: &mut Vec<Primitive>, clipper: Self::Components) {
+    fn run(&self, drawlist: &mut Vec<Primitive>, (mut clipper, layout): Self::Components) {
         let mut stack = self.current.borrow_mut();
-        let clipper = clipper.borrow();
+        let mut clipper = clipper.borrow_mut();
+
+        layout
+            .and_then(|layout| Some(clipper.update(Some(&layout.borrow()))))
+            .or_else(|| Some(clipper.update(None)));
+            
         if stack.len() > 0 && clipper.intersect {
             let rect = clipper.rect.intersect(&stack[stack.len()-1]).unwrap_or(Rect::from_wh(0.0, 0.0));
             stack.push(rect);

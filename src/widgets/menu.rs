@@ -31,7 +31,7 @@ impl<'a, T:'a> Menu<'a, T> {
 
 impl<'a, T:'a> WidgetBase for Menu<'a, T> {
     fn create(&mut self, id: dag::Id, world: &mut Ui, _style: &Style) {
-        world.create_component(id, Drawing{ primitives: vec![] });
+        world.create_component(id, Drawing::new());
         world.create_component(id, MenuState::Idle);
     }
 

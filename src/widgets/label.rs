@@ -4,7 +4,6 @@ pub struct Label<'a> {
     text: &'a str,
     size: f32,
     wrap: TextWrap,
-    gravity: (Gravity, Gravity),
     color: Color,
     border: Option<Color>,
 }
@@ -14,8 +13,7 @@ impl<'a> Label<'a> {
         Self {
             text, 
             size, 
-            wrap, 
-            gravity: (Gravity::Begin, Gravity::Begin),
+            wrap,
             color: Color::black(),
             border: None,
         }
@@ -26,7 +24,6 @@ impl<'a> Label<'a> {
             text, 
             size: 16.0, 
             wrap: TextWrap::NoWrap, 
-            gravity: (Gravity::Middle, Gravity::Begin),
             color: Color::black(),
             border: None,
         }

@@ -51,18 +51,33 @@ impl<'a> WidgetBase for Input<'a> {
         world.create_component(id, InputState::Idle(0.0, 0.0));
         world.create_component(id, layout);
         world.create_component(id, text);
-        world.create_component(id, Drawing{ primitives: vec![] });
-        world.create_component(id, Clipper{ rect: Rect::from_wh(0.0, 0.0), intersect: true });
+        world.create_component(id, Drawing::new());
+        world.create_component(id, Clipper::new(Rect::zero()));
         world.create_component(id, WidgetBackground {
             normal: Background::Patch(style.input.clone(), 1.0),
             hover: Background::Patch(style.input.clone(), 1.0),
             click: Background::Patch(style.input.clone(), 1.0),
         });
     }
+
+    fn update(&mut self, id: dag::Id, world: &mut Ui, _style: &Style, _input: Option<Rect>) -> Option<Rect> {
+        if !world.focus.map(|f| f.0 == id.0).unwrap_or(false) {
+            let mut state = world.component(id).unwrap();
+            let mut state = state.borrow_mut();
+
+            *state = match *state {
+                InputState::Selecting(_, _, _, x, y) => InputState::Idle(x, y),
+                InputState::Selected(_, _, _, x, y) => InputState::Idle(x, y),
+                InputState::Hovered(x, y) => InputState::Hovered(x, y),
+                InputState::Idle(x, y) => InputState::Idle(x, y),
+            };
+        }
+        None
+    }
     
     fn event(&mut self, id: dag::Id, world: &mut Ui, style: &Style, context: &mut EventSystemContext) {
-        let mut layout = world.component::<Layout>(id).unwrap();
-        let mut layout = layout.borrow_mut();
+        let layout = world.component::<Layout>(id).unwrap();
+        let layout = layout.borrow();
 
         if layout.current.is_none() {
             return;

@@ -75,6 +75,7 @@ impl System<EventSystemContext> for ClickableEventSystem {
                 }
             },
             Clickable::Released(hit) => {
+                context.capture = Capture::CaptureFocus(MouseStyle::ArrowClicking);
                 Clickable::Released(*hit)
             },
         }

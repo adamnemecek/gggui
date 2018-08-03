@@ -46,6 +46,16 @@ mod feature {
                 ui.add("b2", Button::new().with_size((128.0, 32.0)));
                 state.remember = ui.add("cb", Toggle::checkbox(state.remember, true, false)).result.unwrap_or(state.remember);
                 ui.add("txt", Label::simple("Remember me"));
+                ui.add("s", Scroll::new().with_vertical_bar()).with(|ui| {
+                    ui.add("test", Button::new().with_size((128.0, 512.0)));
+
+                    layout_rules!(ui,
+                        (test.left = super.margin_left + 20.0),
+                        (test.right = super.margin_right - 20.0),
+                        (test.top = super.margin_top + 20.0),
+                        (test.bottom = super.margin_bottom - 20.0),
+                    );
+                });
 
                 layout_rules!(ui, 
                     (name.right = super.margin_right - 20.0),
@@ -69,6 +79,10 @@ mod feature {
                     (b2.left = b1.right + 8.0),
                     (b2.width = b1.width),
                     (b2.right = super.margin_right - 20.0),
+                    (s.left = super.margin_left + 20.0),
+                    (s.right = super.margin_right - 20.0),
+                    (s.top = b2.bottom + 8.0),
+                    (s.bottom = super.margin_bottom - 20.0),
                 );
             });
         });
@@ -77,7 +91,7 @@ mod feature {
     pub fn demo() {
         let window_config = glutin::WindowBuilder::new()
             .with_title("gg gui test".to_string())
-            .with_dimensions(1024, 768);
+            .with_dimensions((1024, 768).into());
 
         let mut events_loop = glutin::EventsLoop::new();
 
@@ -124,8 +138,8 @@ mod feature {
 
                 if let Event::WindowEvent { event, .. } = event {
                     match event {
-                        WindowEvent::Resized(width, height) => {
-                            window.resize(width, height);
+                        WindowEvent::Resized(size) => {
+                            window.resize(size.to_physical(1.0));
                             gfx_window_glutin::update_views(
                                 &window, 
                                 &mut main_color,
@@ -133,7 +147,7 @@ mod feature {
                             );
                         },
 
-                        WindowEvent::Closed => {
+                        WindowEvent::CloseRequested => {
                             finished = true;
                         }
 

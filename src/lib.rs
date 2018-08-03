@@ -208,6 +208,59 @@ impl Ui {
     }
 
     pub fn update(&mut self, viewport: Rect, events: EventVec) {
+        // first, fix the layout
+        {
+            let free = &mut self.free;
+            let layout_lookup = &mut self.layout_lookup;
+            let layout_solver = &mut self.layout_solver;
+
+            self.containers
+            .get(&TypeId::of::<Layout>())
+            .and_then(|x| x.downcast_ref::<Container<Layout>>())
+            .map(|container| {
+                let mut container = container.borrow_mut();
+
+                // remove constraints of removed widgets
+                for (id, _) in free.fetch_recently_freed_ids() {
+                    container[id].0.take().map(|old_layout| {
+                        layout_lookup.remove(&old_layout.left);
+                        layout_lookup.remove(&old_layout.top);
+                        layout_lookup.remove(&old_layout.right);
+                        layout_lookup.remove(&old_layout.bottom);
+                        for c in old_layout.constraints() {
+                            layout_solver.remove_constraint(c).expect("Layout crash");
+                        }
+                    });
+                }
+
+                for c in free.fetch_recently_freed_constraints() {
+                    layout_solver.remove_constraint(&c).expect("Layout crash");
+                }
+
+                // apply any changes to the layout
+                for (var, val) in layout_solver.fetch_changes() {
+                    layout_lookup.get(&var).map(|(id, _)| {
+                        let layout = container[*id].0.as_mut().unwrap();
+                        if layout.current.is_none() {
+                            layout.current = Some(Rect::zero());
+                        }
+                        if *var == layout.left {
+                            layout.current.as_mut().unwrap().left = *val as f32;
+                        }
+                        else if *var == layout.right {
+                            layout.current.as_mut().unwrap().right = *val as f32;
+                        }
+                        else if *var == layout.top {
+                            layout.current.as_mut().unwrap().top = *val as f32;
+                        }
+                        else if *var == layout.bottom {
+                            layout.current.as_mut().unwrap().bottom = *val as f32;
+                        }
+                    });
+                }
+            });
+        }
+        
         for event in events.iter() {
             match event {
                 &Event::Cursor(x, y) => self.cursor = (x, y),
@@ -223,6 +276,8 @@ impl Ui {
 
         if self.events.len() > 0 {
             self.mouse_style = MouseStyle::Arrow;
+        } else {
+            self.events.push(Event::Idle);
         }
 
         let mut no_modal_found = true;
@@ -289,60 +344,7 @@ impl Ui {
     }
 
     pub fn render(&mut self) -> (DrawList, MouseStyle, MouseMode) {
-        // first, fix the layout
-        {
-            let free = &mut self.free;
-            let layout_lookup = &mut self.layout_lookup;
-            let layout_solver = &mut self.layout_solver;
-
-            self.containers
-            .get(&TypeId::of::<Layout>())
-            .and_then(|x| x.downcast_ref::<Container<Layout>>())
-            .map(|container| {
-                let mut container = container.borrow_mut();
-
-                // remove constraints of removed widgets
-                for (id, _) in free.fetch_recently_freed_ids() {
-                    container[id].0.take().map(|old_layout| {
-                        layout_lookup.remove(&old_layout.left);
-                        layout_lookup.remove(&old_layout.top);
-                        layout_lookup.remove(&old_layout.right);
-                        layout_lookup.remove(&old_layout.bottom);
-                        for c in old_layout.constraints() {
-                            layout_solver.remove_constraint(c);
-                        }
-                    });
-                }
-
-                for c in free.fetch_recently_freed_constraints() {
-                    layout_solver.remove_constraint(&c);
-                }
-
-                // apply any changes to the layout
-                for (var, val) in layout_solver.fetch_changes() {
-                    layout_lookup.get(&var).map(|(id, _)| {
-                        let layout = container[*id].0.as_mut().unwrap();
-                        if layout.current.is_none() {
-                            layout.current = Some(Rect::zero());
-                        }
-                        if *var == layout.left {
-                            layout.current.as_mut().unwrap().left = *val as f32;
-                        }
-                        else if *var == layout.right {
-                            layout.current.as_mut().unwrap().right = *val as f32;
-                        }
-                        else if *var == layout.top {
-                            layout.current.as_mut().unwrap().top = *val as f32;
-                        }
-                        else if *var == layout.bottom {
-                            layout.current.as_mut().unwrap().bottom = *val as f32;
-                        }
-                    });
-                }
-            });
-        }
-
-        // Sort windows by layer, indepently of last clicked sorting
+        // Sort layers by type, indepently of last clicked sorting
         self.layers.sort_by(|a,b| {
             let a = match &a.layer {
                 Layer::Back => 0,
@@ -362,10 +364,10 @@ impl Ui {
 
         let mut drawlists = vec![];
 
-        for win in layers.iter_mut() {
-            let tree = win.tree.as_mut().unwrap();
+        for ly in layers.iter_mut() {
+            let tree = ly.tree.as_mut().unwrap();
             tree.cleanup(self.iteration, &mut self.free);
-            if win.used >= self.iteration {
+            if ly.used >= self.iteration {
                 drawlists.push(self.run_systems(tree));
             }
         }
@@ -428,7 +430,7 @@ impl Ui {
             lookup.insert(new_layout.top, (id, gen));
             lookup.insert(new_layout.right, (id, gen));
             lookup.insert(new_layout.bottom, (id, gen));
-            solver.add_constraints(new_layout.constraints());
+            solver.add_constraints(new_layout.constraints()).expect("Invalid constraints");
         });     
     }
 
@@ -526,7 +528,9 @@ impl<'a> Context<'a> {
         if self.is_new {
             let top = self.parent.tree_stack.len() - 1;
             self.parent.tree_stack[top].rules = rules(&mut |id| self.parent.var(id));
-            self.parent.layout_solver.add_constraints(self.parent.tree_stack[top].rules.iter());
+            self.parent.layout_solver
+                .add_constraints(self.parent.tree_stack[top].rules.iter())
+                .expect("Invalid constraints");
         }
     }
 

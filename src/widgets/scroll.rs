@@ -1,8 +1,12 @@
+use cassowary::WeightedRelation::EQ;
+use cassowary::strength::REQUIRED;
 use super::*;
 
 #[derive(Clone,Copy,PartialEq)]
 pub struct ScrollState {
     scroll: (f32, f32),
+    scroll_vars: (cassowary::Variable, cassowary::Variable),
+    content: (cassowary::Variable, cassowary::Variable),
     inner: MouseState,
 }
 
@@ -17,17 +21,15 @@ pub enum MouseState {
 }
 
 pub struct Scroll {
-    layout: Layout,
     content: Rect,
     horizontal: bool,
     vertical: bool,
 }
 
 impl Scroll {
-    pub fn new(layout: Layout) -> Self {
+    pub fn new() -> Self {
         Self {
-            layout,
-            content: Rect::from_wh(0.0, 0.0),
+            content: Rect::zero(),
             horizontal: false,
             vertical: false,
         }
@@ -46,80 +48,64 @@ impl Scroll {
 
 impl WidgetBase for Scroll {
     fn create(&mut self, id: dag::Id, world: &mut Ui, style: &Style) {
-        world.create_component(id, ScrollState {
-            scroll: (0.0, 0.0),
-            inner: MouseState::Idle,
-        });
-        world.create_component(id, Layout {
-            current: self.layout.current.or(Some(Rect::zero())),
-            margin: self.layout.margin,
-            padding: Rect { 
+        let scroll_h = cassowary::Variable::new();
+        let scroll_v = cassowary::Variable::new();
+        let content_w = cassowary::Variable::new();
+        let content_h = cassowary::Variable::new();
+
+        let layout = Layout::new()
+            .with_margins(Rect {
                 left: 0.0, 
                 top: 0.0, 
                 right: if self.vertical { style.scroll_vertical.0.image.size.width() } else { 0.0 }, 
                 bottom: if self.horizontal { style.scroll_horizontal.0.image.size.width() } else { 0.0 }, 
-            },
-            constraints: self.layout.constraints.clone(),
-            gravity: self.layout.gravity.clone(),
+            })
+            .with_detached_margin()
+            .with_constraints(|layout| vec![
+                layout.margin_left |EQ(REQUIRED)| layout.left - scroll_h,
+                layout.margin_top |EQ(REQUIRED)| layout.top - scroll_v,
+                layout.margin_left + content_w |EQ(REQUIRED)| layout.margin_right,
+                layout.margin_top + content_h |EQ(REQUIRED)| layout.margin_bottom,
+            ])
+            .with_edit(scroll_h, &mut world.layout_solver)
+            .with_edit(scroll_v, &mut world.layout_solver);
+
+        world.create_component(id, ScrollState {
+            scroll: (0.0, 0.0),
+            scroll_vars: (scroll_h, scroll_v),
+            content: (content_w, content_h),
+            inner: MouseState::Idle,
         });
-        world.create_component(id, Clipper {
-            rect: Rect::zero(),
-            intersect: true,
-        });
-        world.create_component(id, Drawing {
-            primitives: vec![],
-        });
+        world.create_component(id, layout);
+        world.create_component(id, Clipper::new(Rect::zero()).with_updater(|clip, layout| {
+            let current = layout.as_ref().unwrap().current.clone();
+            if current.is_some() {
+                clip.rect = current.unwrap();
+            }
+        }));
+        world.create_component(id, Drawing::new());      
     }
 
-    fn update(&mut self, id: dag::Id, world: &Ui, style: &Style, window: Viewport) -> Viewport {
+    fn update(&mut self, id: dag::Id, world: &mut Ui, style: &Style, window: Option<Rect>) -> Option<Rect> {
         let mut state = world.component::<ScrollState>(id).unwrap();
         let mut state = state.borrow_mut().clone();
 
-        let layout = world.component::<Layout>(id).unwrap();
-        let current = layout.borrow().current.unwrap();
-        let padded = layout.borrow().after_padding();
+        let (current, padded) = {
+            let layout = world.component::<Layout>(id).unwrap();
+            let layout = layout.borrow();
+            if layout.current.is_none() {
+                return None;
+            }
 
-        let mut clipper = world.component::<Clipper>(id).unwrap();
-        clipper.borrow_mut().rect = layout.borrow().current.unwrap();
-
-        let mut viewport = Viewport {
-            child_rect: padded,
-            input_rect: window.input_rect.and_then(|ir| ir.intersect(&padded)),
+            let current = layout.current.unwrap();
+            let padded = current.after_padding(layout.margin());
+            (current, padded)
         };
 
-        for child in world.children() {
-            world.component(*child).map(|mut layout: FetchComponent<Layout>| {
-                let mut layout = layout.borrow_mut();
-                layout.current = layout.current.map(|rect| {
-                    let rect = Rect {
-                        left: viewport.child_rect.left-state.scroll.0,
-                        top: viewport.child_rect.top-state.scroll.1,
-                        right: viewport.child_rect.left-state.scroll.0 + rect.width(),
-                        bottom: viewport.child_rect.top-state.scroll.1 + rect.height(),
-                    };
-
-                    viewport.child_rect = rect;
-                    rect
-                }).or_else(|| {
-                    let rect = Rect{
-                        left: viewport.child_rect.left-state.scroll.0,
-                        top: viewport.child_rect.top-state.scroll.1,
-                        right: viewport.child_rect.left-state.scroll.0 + viewport.child_rect.width(),
-                        bottom: viewport.child_rect.top-state.scroll.1 + viewport.child_rect.height(),
-                    };
-
-                    viewport.child_rect = rect;
-                    Some(rect)
-                });
-
-                self.content = layout.current.map(|content| Rect {
-                    left: 0.0,
-                    top: 0.0,
-                    right:  (content.width() - current.width()).max(0.0),
-                    bottom: (content.height() - current.height()).max(0.0),
-                }).unwrap();
-            });
-        }
+        self.content = Rect::from_wh(
+            (world.layout_solver.get_value(state.content.0) as f32 - current.width()).max(0.0),
+            (world.layout_solver.get_value(state.content.1) as f32 - current.height()).max(0.0)
+        );
 
         state.scroll.0 = (state.scroll.0).max(self.content.left).min(self.content.right);
         state.scroll.1 = (state.scroll.1).max(self.content.top).min(self.content.bottom);
@@ -176,18 +162,22 @@ impl WidgetBase for Scroll {
             drawing.primitives.push(Primitive::Draw9(style.scroll_vertical.1.clone(), vertical_rect, Color::white()));
         }
 
-        viewport
+        window.and_then(|ir| ir.intersect(&padded))
     }
 
-    fn event(&mut self, id: dag::Id, world: &Ui, _style: &Style, context: &mut EventSystemContext) {
+    fn event(&mut self, id: dag::Id, world: &mut Ui, _style: &Style, context: &mut EventSystemContext) {
         let mut state: FetchComponent<ScrollState> = world.component(id).unwrap();
         let mut state = state.borrow_mut();
 
         let layout: FetchComponent<Layout> = world.component(id).unwrap();
         let layout = layout.borrow();
 
+        if layout.current.is_none() {
+            return;
+        }
+
         let current = layout.current.unwrap();
-        let padded = layout.after_padding();
+        let padded = current.after_padding(layout.margin());
 
         let content_rect = padded;
 
@@ -268,6 +258,8 @@ impl WidgetBase for Scroll {
                     self.content.right
                 );
 
+                world.layout_solver.suggest_value(state.scroll_vars.0, state.scroll.0 as f64).ok();
+
                 if let Event::Release(Key::LeftMouseButton, _) = context.event {
                     MouseState::Idle
                 } else {
@@ -291,6 +283,8 @@ impl WidgetBase for Scroll {
                     self.content.bottom
                 );
 
+                world.layout_solver.suggest_value(state.scroll_vars.1, state.scroll.1 as f64).ok();
+
                 if let Event::Release(Key::LeftMouseButton, _) = context.event {
                     MouseState::Idle
                 } else {
@@ -302,7 +296,10 @@ impl WidgetBase for Scroll {
         if state.inner != MouseState::Idle {
             if let Event::Scroll(dx, dy) = context.event {
                 state.scroll.0 = (state.scroll.0 - dx).max(self.content.left).min(self.content.right);
+                world.layout_solver.suggest_value(state.scroll_vars.0, state.scroll.0 as f64).ok();
+
                 state.scroll.1 = (state.scroll.1 - dy).max(self.content.top).min(self.content.bottom);
+                world.layout_solver.suggest_value(state.scroll_vars.1, state.scroll.1 as f64).ok();
             }
         }
     }

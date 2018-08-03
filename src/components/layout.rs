@@ -29,6 +29,8 @@ pub struct Layout {
     pub margin_top: cassowary::Variable,
     pub margin_bottom: cassowary::Variable,
     constraints: Vec<cassowary::Constraint>,
+    edits: Vec<cassowary::Variable>,
+    margin: Rect,
     pub current: Option<Rect>,
 }
 
@@ -57,11 +59,13 @@ impl Layout {
                 center_x |EQ(REQUIRED)| (left+right)*0.5,
                 center_y |EQ(REQUIRED)| (top+bottom)*0.5,
 
-                margin_left |EQ(REQUIRED)| left,
-                margin_right |EQ(REQUIRED)| right,
-                margin_top |EQ(REQUIRED)| top,
-                margin_bottom |EQ(REQUIRED)| bottom,
+                margin_left |EQ(STRONG)| left,
+                margin_right |EQ(STRONG)| right,
+                margin_top |EQ(STRONG)| top,
+                margin_bottom |EQ(STRONG)| bottom,
             ],
+            edits: vec![],
+            margin: Rect::zero(),
             current: None,
 
             left, right,
@@ -73,11 +77,29 @@ impl Layout {
         }
     }
 
-    pub fn as_editable(self, solver: &mut cassowary::Solver) -> Self {
-        solver.add_edit_variable(self.left, STRONG);
-        solver.add_edit_variable(self.top, STRONG);
-        solver.add_edit_variable(self.right, STRONG);
-        solver.add_edit_variable(self.bottom, STRONG);
+    pub fn as_editable(mut self, solver: &mut cassowary::Solver) -> Self {
+        solver.add_edit_variable(self.left, STRONG).expect("unexpected edit variable error");
+        solver.add_edit_variable(self.top, STRONG).expect("unexpected edit variable error");
+        solver.add_edit_variable(self.right, STRONG).expect("unexpected edit variable error");
+        solver.add_edit_variable(self.bottom, STRONG).expect("unexpected edit variable error");
+        self.edits.push(self.left);
+        self.edits.push(self.top);
+        self.edits.push(self.right);
+        self.edits.push(self.bottom);
+        self
+    }
+
+    pub fn with_edit(mut self, edit: cassowary::Variable, solver: &mut cassowary::Solver) -> Self {
+        solver.add_edit_variable(edit, STRONG).expect("unexpected edit variable error");
+        self.edits.push(edit);
+        self
+    }
+
+    pub fn with_detached_margin(mut self) -> Self {
+        self.constraints.remove(4);
+        self.constraints.remove(4);
+        self.constraints.remove(4);
+        self.constraints.remove(4);
         self
     }
 
@@ -86,6 +108,7 @@ impl Layout {
         self.constraints[5] = self.margin_right |EQ(REQUIRED)| self.right - margin.right as f64;
         self.constraints[6] = self.margin_top |EQ(REQUIRED)| self.top + margin.top as f64;
         self.constraints[7] = self.margin_bottom |EQ(REQUIRED)| self.bottom - margin.bottom as f64;
+        self.margin = margin;
         self
     }
 
@@ -117,57 +140,59 @@ impl Layout {
     pub fn constraints<'a>(&'a self) -> &'a[cassowary::Constraint] {
         self.constraints.as_slice()
     }
+
+    pub fn edits<'a>(&'a self) -> &'a[cassowary::Variable] {
+        self.edits.as_slice()
+    }
+
+    pub fn margin(&self) -> Rect {
+        self.margin
+    }
 }
 
 #[macro_export]
 macro_rules! layout_rules {
-        // Equations
-        ($lookup:path, [ $a:expr ] = $($rest:tt)*) => {
-            layout_rules!($lookup, [ $a |EQ(REQUIRED)| layout_rules!($lookup, [] $($rest)*)])
-        };
-        ($lookup:path, [ $a:expr ] >= $($rest:tt)*) => {
-            layout_rules!($lookup, [ $a |GE(REQUIRED)| layout_rules!($lookup, [] $($rest)*)])
-        };
-        ($lookup:path, [ $a:expr ] <= $($rest:tt)*) => {
-            layout_rules!($lookup, [ $a |LE(REQUIRED)| layout_rules!($lookup, [] $($rest)*)])
-        };
-
-        // Arithmetic
-        ($lookup:path, [ $a:expr ] + $($rest:tt)*) => {
-            layout_rules!($lookup, [ $a + layout_rules!($lookup, [] $($rest)*)])
-        };
-        ($lookup:path, [ $a:expr ] - $($rest:tt)*) => {
-            layout_rules!($lookup, [ $a - layout_rules!($lookup, [] $($rest)*)])
-        };
-        ($lookup:path, [ $a:expr ] * $($rest:tt)*) => {
-            layout_rules!($lookup, [ $a * layout_rules!($lookup, [] $($rest)*)])
-        };
-        ($lookup:path, [ $a:expr ] / $($rest:tt)*) => {
-            layout_rules!($lookup, [ $a / layout_rules!($lookup, [] $($rest)*)])
-        };
-
-        // Parenthesis dereference
-        ($lookup:path, [ $($stack:expr),* ] ($($rest:tt)*)) => {
-            layout_rules!($lookup, [ $($stack ,)* ] $($rest)*)
-        };
-        
-        // Variable lookup
-        ($lookup:path, [ $($stack:expr),* ] $view:tt.$name:tt $($rest:tt)*) => {
-            layout_rules!($lookup, [ $lookup(&format!("{0}.{1}", stringify!($view), stringify!($name))) $(, $stack)* ] $($rest)*)
-        };
-
-        // Fixed numbers
-        ($lookup:path, [ $($stack:expr),* ] $num:tt $($rest:tt)*) => {
-            layout_rules!($lookup, [ $num $(, $stack)* ] $($rest)*)
-        };
-
-        // Results
-        ($lookup:path, [$result:expr]) => {
-            $result
-        };
-
-        // Entry point
-        ($ui:path, $($tokens:tt,)*) => {
-            $ui.rules(|var| vec![$(layout_rules!(var, [] $tokens)),*])
-        };        
-    }
+    // Equations
+    ($lookup:path, [ $a:expr ] = $($rest:tt)*) => {
+        layout_rules!($lookup, [ $a |EQ(REQUIRED)| layout_rules!($lookup, [] $($rest)*)])
+    };
+    ($lookup:path, [ $a:expr ] >= $($rest:tt)*) => {
+        layout_rules!($lookup, [ $a |GE(REQUIRED)| layout_rules!($lookup, [] $($rest)*)])
+    };
+    ($lookup:path, [ $a:expr ] <= $($rest:tt)*) => {
+        layout_rules!($lookup, [ $a |LE(REQUIRED)| layout_rules!($lookup, [] $($rest)*)])
+    };
+    // Arithmetic
+    ($lookup:path, [ $a:expr ] + $($rest:tt)*) => {
+        layout_rules!($lookup, [ $a + layout_rules!($lookup, [] $($rest)*)])
+    };
+    ($lookup:path, [ $a:expr ] - $($rest:tt)*) => {
+        layout_rules!($lookup, [ $a - layout_rules!($lookup, [] $($rest)*)])
+    };
+    ($lookup:path, [ $a:expr ] * $($rest:tt)*) => {
+        layout_rules!($lookup, [ $a * layout_rules!($lookup, [] $($rest)*)])
+    };
+    ($lookup:path, [ $a:expr ] / $($rest:tt)*) => {
+        layout_rules!($lookup, [ $a / layout_rules!($lookup, [] $($rest)*)])
+    };
+    // Parenthesis dereference
+    ($lookup:path, [ $($stack:expr),* ] ($($rest:tt)*)) => {
+        layout_rules!($lookup, [ $($stack ,)* ] $($rest)*)
+    };
+    // Variable lookup
+    ($lookup:path, [ $($stack:expr),* ] $view:tt.$name:tt $($rest:tt)*) => {
+        layout_rules!($lookup, [ $lookup(&format!("{0}.{1}", stringify!($view), stringify!($name))) $(, $stack)* ] $($rest)*)
+    };
+    // Fixed numbers
+    ($lookup:path, [ $($stack:expr),* ] $num:tt $($rest:tt)*) => {
+        layout_rules!($lookup, [ $num $(, $stack)* ] $($rest)*)
+    };
+    // Results
+    ($lookup:path, [$result:expr]) => {
+        $result
+    };
+    // Entry point
+    ($ui:path, $($tokens:tt,)*) => {
+        $ui.rules(|var| vec![$(layout_rules!(var, [] $tokens)),*])
+    };        
+}

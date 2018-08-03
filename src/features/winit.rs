@@ -10,8 +10,8 @@ use winit::MouseScrollDelta;
 pub fn convert_event(ev: winit::Event) -> Option<Event> {
     match ev {
         winit::Event::WindowEvent{ event, .. } => match event {
-            WindowEvent::Resized(w, h) => Some(Event::Resize(w as f32, h as f32)),
-            WindowEvent::Closed => Some(Event::Exit),
+            WindowEvent::Resized(size) => Some(Event::Resize(size.width as f32, size.height as f32)),
+            WindowEvent::CloseRequested => Some(Event::Exit),
             WindowEvent::Focused(f) => Some(Event::Focus(f)),
             WindowEvent::ReceivedCharacter(c) => Some(Event::Text(c)),
             WindowEvent::KeyboardInput{ input, .. } => match input {
@@ -45,16 +45,16 @@ pub fn convert_event(ev: winit::Event) -> Option<Event> {
                 MouseButton::Middle => Some(Event::Release(Key::MiddleMouseButton, empty_mods())),
                 MouseButton::Other(_) => None,
             },
-            WindowEvent::CursorMoved{ position: (x, y), .. } => {
-                Some(Event::Cursor(x as f32, y as f32))
+            WindowEvent::CursorMoved{ position, .. } => {
+                Some(Event::Cursor(position.x as f32, position.y as f32))
             },
             WindowEvent::MouseWheel{ delta, .. } => {
                 match delta {
                     MouseScrollDelta::LineDelta(dx, dy) => 
                         Some(Event::Scroll(dx * 20.0, dy * 20.0)),
 
-                    MouseScrollDelta::PixelDelta(dx, dy) =>
-                        Some(Event::Scroll(dx, dy)),
+                    MouseScrollDelta::PixelDelta(delta) =>
+                        Some(Event::Scroll(delta.x as f32, delta.y as f32)),
                 }
             },
             _ => None,
@@ -71,7 +71,7 @@ pub fn convert_event(ev: winit::Event) -> Option<Event> {
 
 pub fn convert_mouse_style(style: MouseStyle) -> winit::MouseCursor {
     match style {
-        MouseStyle::Invisible => winit::MouseCursor::NoneCursor,
+        MouseStyle::Invisible => winit::MouseCursor::Arrow,
         MouseStyle::Arrow => winit::MouseCursor::Arrow,
         MouseStyle::ArrowClickable => winit::MouseCursor::Arrow,
         MouseStyle::ArrowClicking => winit::MouseCursor::Arrow,
