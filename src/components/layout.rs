@@ -78,14 +78,14 @@ impl Layout {
     }
 
     pub fn as_editable(mut self, solver: &mut cassowary::Solver) -> Self {
-        solver.add_edit_variable(self.left, STRONG).expect("unexpected edit variable error");
-        solver.add_edit_variable(self.top, STRONG).expect("unexpected edit variable error");
-        solver.add_edit_variable(self.right, STRONG).expect("unexpected edit variable error");
-        solver.add_edit_variable(self.bottom, STRONG).expect("unexpected edit variable error");
+        solver.add_edit_variable(self.left, WEAK).expect("unexpected edit variable error");
+        solver.add_edit_variable(self.top, WEAK).expect("unexpected edit variable error");
+        solver.add_edit_variable(self.width, STRONG).expect("unexpected edit variable error");
+        solver.add_edit_variable(self.height, STRONG).expect("unexpected edit variable error");
         self.edits.push(self.left);
         self.edits.push(self.top);
-        self.edits.push(self.right);
-        self.edits.push(self.bottom);
+        self.edits.push(self.width);
+        self.edits.push(self.height);
         self
     }
 

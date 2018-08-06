@@ -158,18 +158,8 @@ impl WidgetBase for Window {
                     let s = &mut world.layout_solver;
                     s.suggest_value(layout.left, (context.cursor.x - x) as f64).ok();
                     s.suggest_value(layout.top, (context.cursor.y - y) as f64).ok();
-
-                    let resulting_left = s.get_value(layout.left);
-                    let resulting_top = s.get_value(layout.top);
-
-                    s.suggest_value(layout.right, resulting_left + rect.width() as f64).ok();
-                    s.suggest_value(layout.bottom, resulting_top + rect.height() as f64).ok();
-
-                    let resulting_right = s.get_value(layout.right);
-                    let resulting_bottom = s.get_value(layout.bottom);
-
-                    s.suggest_value(layout.left, resulting_right - rect.width() as f64).ok();
-                    s.suggest_value(layout.top, resulting_bottom - rect.height() as f64).ok();
+                    s.suggest_value(layout.width, rect.width() as f64).ok();
+                    s.suggest_value(layout.height, rect.height() as f64).ok();
                 }
 
                 if let Event::Release(Key::LeftMouseButton, _) = context.event {
@@ -186,39 +176,46 @@ impl WidgetBase for Window {
 
                 let s = &mut world.layout_solver;
 
+                let mut new_rect = rect;
+
                 match anchor {
                     MouseStyle::ResizeN => {
-                        s.suggest_value(layout.top, context.cursor.y.min(rect.bottom - min_h) as f64).ok();
+                        new_rect.top = context.cursor.y.min(rect.bottom - min_h);
                     },
                     MouseStyle::ResizeS => {
-                        s.suggest_value(layout.bottom, context.cursor.y.max(rect.top + min_h) as f64).ok();
+                        new_rect.bottom = context.cursor.y.max(rect.top + min_h);
                     },
                     MouseStyle::ResizeW => {
-                        s.suggest_value(layout.left, context.cursor.x.min(rect.right - min_w) as f64).ok();
+                        new_rect.left = context.cursor.x.min(rect.right - min_w);
                     },
                     MouseStyle::ResizeE => {
-                        s.suggest_value(layout.right, context.cursor.x.max(rect.left + min_w) as f64).ok();
+                        new_rect.right = context.cursor.x.max(rect.left + min_w);
                     },
                     MouseStyle::ResizeNw => {
-                        s.suggest_value(layout.top,  context.cursor.y.min(rect.bottom - min_h) as f64).ok();
-                        s.suggest_value(layout.left, context.cursor.x.min(rect.right - min_w) as f64).ok();
+                        new_rect.top =  context.cursor.y.min(rect.bottom - min_h);
+                        new_rect.left = context.cursor.x.min(rect.right - min_w);
                     },
                     MouseStyle::ResizeNe => {
-                        s.suggest_value(layout.top, context.cursor.y.min(rect.bottom - min_h) as f64).ok();
-                        s.suggest_value(layout.right, context.cursor.x.max(rect.left + min_w) as f64).ok();
+                        new_rect.top = context.cursor.y.min(rect.bottom - min_h);
+                        new_rect.right = context.cursor.x.max(rect.left + min_w);
                     },
                     MouseStyle::ResizeSw => {
-                        s.suggest_value(layout.bottom, context.cursor.y.max(rect.top + min_h) as f64).ok();
-                        s.suggest_value(layout.left, context.cursor.x.min(rect.right - min_w) as f64).ok();
+                        new_rect.bottom = context.cursor.y.max(rect.top + min_h);
+                        new_rect.left = context.cursor.x.min(rect.right - min_w);
                     },
                     MouseStyle::ResizeSe => {
-                        s.suggest_value(layout.bottom, context.cursor.y.max(rect.top + min_h) as f64).ok();
-                        s.suggest_value(layout.right, context.cursor.x.max(rect.left + min_w) as f64).ok();
+                        new_rect.bottom = context.cursor.y.max(rect.top + min_h);
+                        new_rect.right = context.cursor.x.max(rect.left + min_w);
                     },
                     _ => {
                         unreachable!();
                     },
                 }
+
+                s.suggest_value(layout.left, new_rect.left as f64).ok();
+                s.suggest_value(layout.top, new_rect.top as f64).ok();
+                s.suggest_value(layout.width, new_rect.width() as f64).ok();
+                s.suggest_value(layout.height, new_rect.height() as f64).ok();
 
                 if let Event::Release(Key::LeftMouseButton, _) = context.event {
                     WindowState::Idle
