@@ -940,7 +940,7 @@ impl Ui {
         self.mouse_mode = mouse_mode;
 
         DrawList {
-            updates: self.cache.take_updates(),
+            updates: RefCell::new(self.cache.take_updates()),
             vertices: vtx,
             commands: cmd
         }

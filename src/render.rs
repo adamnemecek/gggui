@@ -1,9 +1,10 @@
 use super::primitive::*;
+use std::cell::RefCell;
 
 /// A collection of data needed to render the `Ui` once.
 pub struct DrawList {
     /// A list of texture updates that need to be uploaded before rendering.
-    pub updates: Vec<Update>,
+    pub updates: RefCell<Vec<Update>>,
     /// The vertex buffer used for this frame.
     pub vertices: Vec<Vertex>,
     /// A list of draw commands that use the `vertices` buffer.

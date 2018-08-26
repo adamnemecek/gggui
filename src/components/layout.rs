@@ -34,8 +34,8 @@ pub struct Layout {
     pub current: Option<Rect>,
 }
 
-use cassowary::strength::{WEAK, STRONG, REQUIRED};
-use cassowary::WeightedRelation::*;
+pub use cassowary::strength::{WEAK, STRONG, REQUIRED};
+pub use cassowary::WeightedRelation::{EQ, GE, LE};
 
 impl Layout {
     pub fn new() -> Self {

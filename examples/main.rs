@@ -26,7 +26,7 @@ mod feature {
     use cassowary::strength::*;
     use cassowary::WeightedRelation::*;
 
-    type ColorFormat = gfx::format::Srgba8;
+    type ColorFormat = gfx::format::Rgba8;
     type DepthFormat = gfx::format::DepthStencil;
 
     pub struct State {

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::mem;
+use std::mem::replace;
 
 use gfx;
 use gfx::traits::FactoryExt;
@@ -8,7 +9,7 @@ use render::DrawList;
 use render::Update;
 use render::Command;
 
-type ColorFormat = gfx::format::Srgba8;
+type ColorFormat = gfx::format::Rgba8;
 
 gfx_defines!{
     vertex Vertex {
@@ -64,8 +65,8 @@ impl<R: gfx::Resources> Renderer<R> {
         &mut self, 
         fac: &mut F, 
         enc: &mut gfx::Encoder<R, C>, 
-        drawlist: &mut DrawList) {
-        for update in mem::replace(&mut drawlist.updates, vec![]) {
+        drawlist: &DrawList) {
+        for update in replace(&mut*drawlist.updates.borrow_mut(), vec![]) {
             match update {
                 Update::TextureSubresource{ id, offset, size, data } => {
                     let converted_data: Vec<[u8; 4]> = 
@@ -131,17 +132,13 @@ impl<R: gfx::Resources> Renderer<R> {
         fac: &mut F,
         enc: &mut gfx::Encoder<R, C>, 
         out: &gfx::handle::RenderTargetView<R, ColorFormat>, 
-        mut drawlist: DrawList) { 
+        drawlist: &DrawList) { 
 
-        self.update(fac, enc, &mut drawlist);
+        self.update(fac, enc, drawlist);
 
-        let DrawList {
-            updates,
-            vertices,
-            commands
-        } = drawlist;
-
-        assert!(updates.len() == 0);
+        assert!(drawlist.updates.borrow().len() == 0);
+        let vertices = &drawlist.vertices;
+        let commands = &drawlist.commands;      
 
         let (width,height,_depth,_samples) = out.get_dimensions();
 
@@ -161,7 +158,7 @@ impl<R: gfx::Resources> Renderer<R> {
         };
 
         for command in commands {
-            match command {
+            match command.clone() {
                 Command::Nop => {
                 },
                 
