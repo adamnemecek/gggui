@@ -129,6 +129,7 @@ impl<R: gfx::Resources> Renderer<R> {
 
     pub fn draw<C: gfx::CommandBuffer<R>, F: gfx::Factory<R>>(
         &mut self, 
+        dpi: f32,
         fac: &mut F,
         enc: &mut gfx::Encoder<R, C>, 
         out: &gfx::handle::RenderTargetView<R, ColorFormat>, 
@@ -164,10 +165,10 @@ impl<R: gfx::Resources> Renderer<R> {
                 
                 Command::Clip{ scissor } => {
                     current_scissor = gfx::Rect {
-                        x: scissor.left as _, 
-                        y: scissor.top as _,
-                        w: (scissor.right-scissor.left) as _, 
-                        h: (scissor.bottom-scissor.top) as _,
+                        x: (scissor.left * dpi) as _, 
+                        y: (scissor.top * dpi) as _,
+                        w: ((scissor.right-scissor.left) * dpi) as _, 
+                        h: ((scissor.bottom-scissor.top) * dpi) as _,
                     };
                 },
                 
