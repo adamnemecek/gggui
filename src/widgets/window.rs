@@ -44,10 +44,10 @@ impl WidgetBase for Window {
         let layout = Layout::new()
             .with_margins(style.window.margin())
             .with_constraints(|layout| vec![
-                layout.top |GE(REQUIRED)| 0.0,
-                layout.left |GE(REQUIRED)| 0.0,
-                layout.bottom |LE(REQUIRED)| 768.0,
-                layout.right |LE(REQUIRED)| 1024.0,
+                layout.top |GE(REQUIRED)| world.viewport_top,
+                layout.left |GE(REQUIRED)| world.viewport_left,
+                layout.bottom |LE(REQUIRED)| world.viewport_bottom,
+                layout.right |LE(REQUIRED)| world.viewport_right,
                 layout.width |GE(REQUIRED)| self.min_size.width() as f64,
                 layout.height |GE(REQUIRED)| self.min_size.height() as f64
             ])

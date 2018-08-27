@@ -132,6 +132,19 @@ pub struct Ui {
     mouse_mode: MouseMode,
     layout_solver: cassowary::Solver,
     layout_lookup: HashMap<cassowary::Variable, dag::Id>,
+
+    viewport_left: cassowary::Variable,
+    viewport_top: cassowary::Variable,
+    viewport_right: cassowary::Variable,
+    viewport_bottom: cassowary::Variable,
+    viewport_margin_left: cassowary::Variable,
+    viewport_margin_top: cassowary::Variable,
+    viewport_margin_right: cassowary::Variable,
+    viewport_margin_bottom: cassowary::Variable,
+    viewport_width: cassowary::Variable,
+    viewport_height: cassowary::Variable,
+    viewport_center_x: cassowary::Variable,
+    viewport_center_y: cassowary::Variable,
 }
 
 pub struct Context<'a> {
@@ -169,6 +182,38 @@ impl Ui {
             Box::new(ClickableEventSystem{}),
         ];
 
+        let mut layout_solver = cassowary::Solver::new();
+
+        let viewport_left = cassowary::Variable::new();
+        let viewport_top = cassowary::Variable::new();
+        let viewport_right = cassowary::Variable::new();
+        let viewport_bottom = cassowary::Variable::new();
+        let viewport_margin_left = cassowary::Variable::new();
+        let viewport_margin_top = cassowary::Variable::new();
+        let viewport_margin_right = cassowary::Variable::new();
+        let viewport_margin_bottom = cassowary::Variable::new();
+        let viewport_width = cassowary::Variable::new();
+        let viewport_height = cassowary::Variable::new();
+        let viewport_center_x = cassowary::Variable::new();
+        let viewport_center_y = cassowary::Variable::new();
+
+        let constraints = vec![
+            viewport_left + viewport_width |EQ(REQUIRED)| viewport_right,
+            viewport_top + viewport_height |EQ(REQUIRED)| viewport_bottom,
+            viewport_center_x |EQ(REQUIRED)| (viewport_left+viewport_right)*0.5,
+            viewport_center_y |EQ(REQUIRED)| (viewport_top+viewport_bottom)*0.5,
+            viewport_margin_left |EQ(STRONG)| viewport_left,
+            viewport_margin_right |EQ(STRONG)| viewport_right,
+            viewport_margin_top |EQ(STRONG)| viewport_top,
+            viewport_margin_bottom |EQ(STRONG)| viewport_bottom,
+        ];
+
+        layout_solver.add_constraints(constraints.iter()).ok();
+        layout_solver.add_edit_variable(viewport_left, STRONG).ok();
+        layout_solver.add_edit_variable(viewport_top, STRONG).ok();
+        layout_solver.add_edit_variable(viewport_right, STRONG).ok();
+        layout_solver.add_edit_variable(viewport_bottom, STRONG).ok();
+
         Self {
             iteration: 1,
             focus: None,
@@ -190,8 +235,20 @@ impl Ui {
             previous_capture: Capture::None,
             mouse_style: MouseStyle::Arrow,
             mouse_mode: MouseMode::Normal,
-            layout_solver: cassowary::Solver::new(),
+            layout_solver,
             layout_lookup: HashMap::new(),
+            viewport_left,
+            viewport_top,
+            viewport_right,
+            viewport_bottom,
+            viewport_margin_left,
+            viewport_margin_top,
+            viewport_margin_right,
+            viewport_margin_bottom,
+            viewport_width,
+            viewport_height,
+            viewport_center_x,
+            viewport_center_y,
         }
     }
 
@@ -213,6 +270,11 @@ impl Ui {
             let free = &mut self.free;
             let layout_lookup = &mut self.layout_lookup;
             let layout_solver = &mut self.layout_solver;
+
+            layout_solver.suggest_value(self.viewport_left, viewport.left as f64).ok();
+            layout_solver.suggest_value(self.viewport_right, viewport.right as f64).ok();
+            layout_solver.suggest_value(self.viewport_top, viewport.top as f64).ok();
+            layout_solver.suggest_value(self.viewport_bottom, viewport.bottom as f64).ok();
 
             self.containers
             .get(&TypeId::of::<Layout>())
@@ -317,7 +379,23 @@ impl Ui {
                 layer,
                 rect: Rect::zero(),
             });
-            tree = Some(dag::Tree::new());
+
+            tree = Some({
+                let mut tree = dag::Tree::new();
+                tree.vars.insert(String::from("super.left"), self.viewport_left);
+                tree.vars.insert(String::from("super.top"), self.viewport_top);
+                tree.vars.insert(String::from("super.right"), self.viewport_right);
+                tree.vars.insert(String::from("super.bottom"), self.viewport_bottom);
+                tree.vars.insert(String::from("super.margin_left"), self.viewport_margin_left);
+                tree.vars.insert(String::from("super.margin_top"), self.viewport_margin_top);
+                tree.vars.insert(String::from("super.margin_right"), self.viewport_margin_right);
+                tree.vars.insert(String::from("super.margin_bottom"), self.viewport_margin_bottom);
+                tree.vars.insert(String::from("super.width"), self.viewport_width);
+                tree.vars.insert(String::from("super.height"), self.viewport_height);
+                tree.vars.insert(String::from("super.center_x"), self.viewport_center_x);
+                tree.vars.insert(String::from("super.center_y"), self.viewport_center_y);
+                tree
+            });            
 
             true
         } else {
@@ -369,7 +447,7 @@ impl Ui {
             tree.cleanup(self.iteration, &mut self.free);
             if ly.used >= self.iteration {
                 drawlists.push(self.run_systems(tree));
-            }
+            } 
         }
 
         // Remove unused layers
