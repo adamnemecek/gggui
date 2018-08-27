@@ -548,6 +548,17 @@ impl<'a, T: 'static + Widget> WidgetResult<'a, T> {
         f(&mut self.context);
         &self.result
     }
+
+    pub fn wrap<W: 'a + Widget>(mut self, widget: W) -> T::Result {
+        self.context.add("x", widget);
+        self.context.rules(|var| vec![
+            var("x.left") |EQ(REQUIRED)| var("super.margin_left"),
+            var("x.right") |EQ(REQUIRED)| var("super.margin_right"),
+            var("x.top") |EQ(REQUIRED)| var("super.margin_top"),
+            var("x.bottom") |EQ(REQUIRED)| var("super.margin_bottom"),
+        ]);
+        self.result
+    }
 }
 
 // When the context is dropped, events and rendering will be evaluated and the results will be 
