@@ -20,6 +20,7 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use std::any::Any;
 use std::any::TypeId;
+use std::sync::atomic::{Ordering, AtomicUsize, ATOMIC_USIZE_INIT};
 use smallvec::SmallVec;
 
 pub mod features;
@@ -47,7 +48,12 @@ pub use self::loadable::*;
 use self::cache::Cache;
 use self::systems::*;
 
-pub type Font = (self::cache::Font, self::cache::FontId);
+#[derive(Clone)]
+pub struct Font {
+    pub inner: self::cache::Font,
+    pub id: self::cache::FontId,
+    pub tex_slot: usize,
+}
 
 pub type EventVec = SmallVec<[Event; 4]>;
 
@@ -162,6 +168,8 @@ pub struct WidgetResult<'a, T: 'a + Widget> {
     pub context: Context<'a>,
 }
 
+static INSTANCE_COUNTER: AtomicUsize = ATOMIC_USIZE_INIT;
+
 impl Ui {
     pub fn new() -> Self {
 
@@ -225,7 +233,7 @@ impl Ui {
             sys_render_post,
             sys_event,
             events: EventVec::new(),
-            cache: Cache::new(2048),
+            cache: Cache::new(2048, INSTANCE_COUNTER.fetch_add(1, Ordering::SeqCst)),
             tabstop_last_id: None,
             tabstop_focus_id: None,
             viewport: Rect::from_wh(0.0, 0.0),
@@ -930,7 +938,7 @@ impl Ui {
 
                     current_command
                         .append(Command::Textured{
-                            texture: 0,
+                            texture: text.font.tex_slot,
                             offset, 
                             count: vtx.len()-offset })
                         .and_then(|c| Some(cmd.push(c)));

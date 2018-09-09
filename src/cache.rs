@@ -18,7 +18,7 @@ pub type FontId = usize;
 enum CachedResource {
     Patch(Patch),
     Image(Image),
-    Font(Font,FontId),
+    Font(super::Font),
 }
 
 enum TextureSlot {
@@ -31,13 +31,14 @@ pub struct Cache {
     size: usize,
     glyphs: GlyphCache,
     textures: Vec<TextureSlot>,
+    textures_offset: usize,
     resources: HashMap<String, CachedResource>,
     updates: Vec<Update>,
     font_id_counter: usize,
 }
 
 impl Cache {
-    pub fn new(size: usize) -> Cache {
+    pub fn new(size: usize, offset: usize) -> Cache {
         const SCALE_TOLERANCE: f32 = 0.1;
         const POSITION_TOLERANCE: f32 = 0.1;
 
@@ -52,7 +53,7 @@ impl Cache {
         atlas.insert((), size/2).unwrap();
 
         let atlas_create = Update::Texture {
-            id: 0,
+            id: offset,
             size: [size as u32, size as u32],
             data: Vec::new(),
             atlas: true,
@@ -62,6 +63,7 @@ impl Cache {
             size: size,
             glyphs: glyphs,
             textures: vec![TextureSlot::Atlas(atlas)],
+            textures_offset: offset,
             resources: HashMap::new(),
             updates: vec![atlas_create],
             font_id_counter: 0
@@ -80,7 +82,7 @@ impl Cache {
                 Some(entry) => match entry {
                     &CachedResource::Patch(ref patch) => return patch.clone(),
                     &CachedResource::Image(_) => panic!("Resource is of type 'Image', not 'Patch'"),
-                    &CachedResource::Font(_,_) => panic!("Resource is of type 'Font', not 'Patch'"),
+                    &CachedResource::Font(_) => panic!("Resource is of type 'Font', not 'Patch'"),
                 },
                 _ => (),
             }
@@ -100,7 +102,7 @@ impl Cache {
                 Some(entry) => match entry {
                     &CachedResource::Image(ref image) => return image.clone(),
                     &CachedResource::Patch(_) => panic!("Resource is of type 'Patch', not 'Image'"),
-                    &CachedResource::Font(_, _) => panic!("Resource is of type 'Font', not 'Image'"),
+                    &CachedResource::Font(_) => panic!("Resource is of type 'Font', not 'Image'"),
                 },
                 _ => (),
             }
@@ -112,13 +114,13 @@ impl Cache {
         value
     }
 
-    pub fn get_font<L: Loadable<'static>>(&mut self, load: L) -> (Font, FontId) {
+    pub fn get_font<L: Loadable<'static>>(&mut self, load: L) -> super::Font {
         let key = load.uid();
 
         if key.len() > 0 {
             match self.resources.get(&key) {
                 Some(entry) => match entry {
-                    &CachedResource::Font(ref font, font_id) => return (font.clone(), font_id),
+                    &CachedResource::Font(ref font) => return font.clone(),
                     &CachedResource::Patch(_) => panic!("Resource is of type 'Patch', not 'Font'"),
                     &CachedResource::Image(_) => panic!("Resource is of type 'Image', not 'Font'"),
                 },
@@ -131,8 +133,14 @@ impl Cache {
         let font_id = self.font_id_counter;
         self.font_id_counter += 1;
 
-        self.resources.insert(key, CachedResource::Font(value.clone(), font_id as FontId));
-        (value, font_id)
+        let result = super::Font {
+            inner: value,
+            id: font_id,
+            tex_slot: self.textures_offset,
+        };
+
+        self.resources.insert(key, CachedResource::Font(result.clone()));
+        result
     }
 
     pub fn draw_text<F: FnMut(Rect,Rect)>(
@@ -149,8 +157,10 @@ impl Cache {
         });
 
         for g in placed_glyphs.iter() {
-            self.glyphs.queue_glyph(text.font.1 as usize, g.clone());
+            self.glyphs.queue_glyph(text.font.id as usize, g.clone());
         }
+
+        let textures_offset = self.textures_offset;
 
         let updates = &mut self.updates;
         self.glyphs.cache_queued(|rect, data| {
@@ -164,7 +174,7 @@ impl Cache {
             }
 
             let update = Update::TextureSubresource {
-                id: 0,
+                id: textures_offset,
                 offset: [rect.min.x, rect.min.y],
                 size: [rect.width(), rect.height()],
                 data: new_data,
@@ -174,7 +184,7 @@ impl Cache {
         }).unwrap();
 
         for g in placed_glyphs.iter() {
-            self.glyphs.rect_for(text.font.1 as usize, g).unwrap().map(|(uv, pos)| {
+            self.glyphs.rect_for(text.font.id as usize, g).unwrap().map(|(uv, pos)| {
                 place_glyph(
                     Rect {
                         left: uv.min.x * 0.5,
@@ -209,21 +219,21 @@ impl Cache {
             area.bottom = area.top + image.height() as usize;
 
             let update = Update::TextureSubresource {
-                id: tex_id,
+                id: tex_id + self.textures_offset,
                 offset: [area.left as u32, area.top as u32],
                 size: [image.width(), image.height()],
                 data: image.to_vec(),
             };
             self.updates.push(update);
 
-            (tex_id, Rect{
+            (self.textures_offset + tex_id, Rect{
                 left: area.left as f32 / atlas_size,
                 top: area.top as f32 / atlas_size,
                 right: area.right as f32 / atlas_size,
                 bottom: area.bottom as f32 / atlas_size,
             })
         } else {
-            let tex_id = self.textures.len();
+            let tex_id = self.textures_offset + self.textures.len();
 
             let update = Update::Texture {
                 id: tex_id,

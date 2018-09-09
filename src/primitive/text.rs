@@ -114,7 +114,7 @@ impl Text {
     pub fn char_positions<'a,'b>(&'b self) -> CharPositionIter<'a, 'b> {
         let scale = rusttype::Scale{ x: self.size, y: self.size };
         CharPositionIter {
-            font: &self.font.0,
+            font: &self.font.inner,
             scale: scale,
             last: None,
             x: 0.0,
@@ -129,7 +129,7 @@ impl Text {
         rect: Rect, 
         mut f: F
     ) {
-        let line = self.font.0.v_metrics(rusttype::Scale{ x: self.size, y: self.size });
+        let line = self.font.inner.v_metrics(rusttype::Scale{ x: self.size, y: self.size });
         
         let width = rect.width();
         let height = -line.descent + line.line_gap + line.ascent;
@@ -175,7 +175,7 @@ impl Text {
     }
 
     pub fn measure(&self, rect: Option<Rect>) -> Rect {
-        let line = self.font.0.v_metrics(rusttype::Scale{ x: self.size, y: self.size });
+        let line = self.font.inner.v_metrics(rusttype::Scale{ x: self.size, y: self.size });
 
         rect.map_or_else(
             || {
