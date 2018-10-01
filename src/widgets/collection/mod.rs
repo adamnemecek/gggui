@@ -59,7 +59,7 @@ impl<L: Layouter> WidgetBase for Collection<L> {
         world.create_component(id, Vec::<CacheItem>::new());
     }
 
-    fn update(&mut self, id: dag::Id, world: &mut Ui, _style: &Style, _input: Option<Rect>) -> Option<Rect> {
+    fn update(&mut self, id: dag::Id, world: &mut Ui, _style: &Style, input: Option<Rect>) -> Option<Rect> {
         let mut previous = None;
         let mut previous_layout: Option<FetchComponent<Layout>> = None;
 
@@ -157,7 +157,8 @@ impl<L: Layouter> WidgetBase for Collection<L> {
         // introduce new constraints
         world.layout_solver.add_constraints(new_constraints.iter()).ok();
 
-        None
+        let parent = parent.borrow();
+        parent.current().and_then(|content| input.and_then(|ir| ir.intersect(&content)))
     }
 }
 
