@@ -23,9 +23,6 @@ mod feature {
     use gggui::features::gfx::Renderer as UiRenderer;
     use gggui::features::winit::*;
 
-    use cassowary::strength::*;
-    use cassowary::WeightedRelation::*;
-
     type ColorFormat = gfx::format::Rgba8;
     type DepthFormat = gfx::format::DepthStencil;
 
@@ -33,11 +30,15 @@ mod feature {
         pub name: String,
         pub pass: String,
         pub remember: bool,
+        pub example_collection: Vec<u32>,
     }
 
     pub fn demo_frame(style: &Style, ui: &mut Ui, state: &mut State) {
+
+
+
         ui.layer(style, "test", Layer::Normal).with(|ui| {
-            ui.add("", Window::new(Rect::from_wh(256.0, 256.0), true)).with(|ui| {
+            ui.add("w", Window::new(Rect::from_wh(256.0, 256.0), true)).with(|ui| {
                 ui.add("name_txt", Label::simple("Username: "));
                 ui.add("name", Input::new(&mut state.name));
                 ui.add("pass_txt", Label::simple("Password: "));
@@ -46,16 +47,13 @@ mod feature {
                 ui.add("b2", Button::new().with_size((128.0, 32.0)));
                 state.remember = ui.add("cb", Toggle::checkbox(state.remember, true, false)).result.unwrap_or(state.remember);
                 ui.add("txt", Label::simple("Remember me"));
-                ui.add("s", Scroll::new().with_vertical_bar()).with(|ui| {
-                    ui.add("test", Button::new().with_size((128.0, 512.0)));
-
-                    layout_rules!(ui,
-                        (test.left = super.margin_left + 20.0),
-                        (test.right = super.margin_right - 20.0),
-                        (test.top = super.margin_top + 20.0),
-                        (test.bottom = super.margin_bottom - 20.0),
-                    );
-                });
+                ui.add("list", Scroll::new().with_vertical_bar())
+                    .wrap_with(Collection::new(TopToBottomLayout::new(ContentAlign::Leading)), |ui| {
+                        for i in 0..20 {
+                            let num = format!("{}", i);
+                            ui.add(&num, Label::simple_owned(format!("label {}", i)));
+                        }
+                    });
 
                 layout_rules!(ui, 
                     (name.right = super.margin_right - 20.0),
@@ -79,10 +77,10 @@ mod feature {
                     (b2.left = b1.right + 8.0),
                     (b2.width = b1.width),
                     (b2.right = super.margin_right - 20.0),
-                    (s.left = super.margin_left + 20.0),
-                    (s.right = super.margin_right - 20.0),
-                    (s.top = b2.bottom + 8.0),
-                    (s.bottom = super.margin_bottom - 20.0),
+                    (list.left = super.margin_left + 20.0),
+                    (list.right = super.margin_right - 20.0),
+                    (list.top = b2.bottom + 8.0),
+                    (list.bottom = super.margin_bottom - 20.0),
                 );
             });
         });
@@ -126,6 +124,7 @@ mod feature {
             name: "".to_string(),
             pass: "".to_string(),
             remember: false,
+            example_collection: vec![0, 1, 2, 3, 4, 5],
         };
 
         while !finished {
@@ -175,7 +174,7 @@ mod feature {
             // render ui
             encoder.clear(&main_color, [0.3, 0.3, 0.3, 1.0]);
             let (drawlist, mouse_style, _mouse_mode) = ui.render();
-            ui_render.draw(&mut factory, &mut encoder, &main_color, drawlist);
+            ui_render.draw(1.0, &mut factory, &mut encoder, &main_color, &drawlist);
 
             // flush and swap
             encoder.flush(&mut device);

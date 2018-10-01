@@ -38,8 +38,6 @@ impl FreeList {
         self.free.push((x, gen+1));
         self.recently_freed_ids.push((x, gen));
         self.recently_freed_constraints.append(&mut constraints);
-
-        println!("free {:?}", x);
     }
 
     pub fn pop(&mut self) -> Id {

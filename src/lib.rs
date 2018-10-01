@@ -37,6 +37,7 @@ pub mod entry;
 mod cache;
 #[allow(dead_code)]
 mod qtree;
+mod identify_first_last;
 
 pub use self::widgets::*;
 pub use self::events::*;
@@ -45,6 +46,7 @@ pub use self::render::*;
 pub use self::widgets::*;
 pub use self::components::*;
 pub use self::loadable::*;
+pub use self::identify_first_last::*;
 use self::cache::Cache;
 use self::systems::*;
 
@@ -166,6 +168,7 @@ pub struct Context<'a> {
 pub struct WidgetResult<'a, T: 'a + Widget> {
     pub result: T::Result,
     pub context: Context<'a>,
+    pub internal_id: dag::Id,
 }
 
 static INSTANCE_COUNTER: AtomicUsize = ATOMIC_USIZE_INIT;
@@ -592,21 +595,26 @@ impl<'a> Context<'a> {
 
         let sub_window = w.update(internal_id, self.parent, self.style, self.window.clone());
 
+        let widgets = &mut self.widgets;
+
+        let context = Context {
+            parent: self.parent,
+            style: self.style,
+            id: self.id,
+            source: Some(id.to_string()),
+            widgets: vec![],
+            window: sub_window,
+            is_new: create,
+        };
+
         let result = w.result(internal_id);
 
-        self.widgets.push((internal_id, Box::new(w)));        
+        widgets.push((internal_id, Box::new(w)));
 
         WidgetResult {
             result,
-            context: Context {
-                parent: self.parent,
-                style: self.style,
-                id: self.id,
-                source: Some(id.to_string()),
-                widgets: vec![],
-                window: sub_window,
-                is_new: create,
-            }
+            context,
+            internal_id,
         }
     }
 
@@ -637,6 +645,20 @@ impl<'a, T: 'static + Widget> WidgetResult<'a, T> {
 
     pub fn wrap<W: 'a + Widget>(mut self, widget: W) -> T::Result {
         self.context.add("x", widget);
+        self.context.rules(|var| vec![
+            var("x.left") |EQ(REQUIRED)| var("super.margin_left"),
+            var("x.right") |EQ(REQUIRED)| var("super.margin_right"),
+            var("x.top") |EQ(REQUIRED)| var("super.margin_top"),
+            var("x.bottom") |EQ(REQUIRED)| var("super.margin_bottom"),
+        ]);
+        self.result
+    }
+
+    pub fn wrap_with<W, F>(mut self, widget: W, f: F) -> T::Result where
+        W: 'a + Widget,
+        F: FnOnce(&mut Context)
+    {
+        f(&mut self.context.add("x", widget).context);
         self.context.rules(|var| vec![
             var("x.left") |EQ(REQUIRED)| var("super.margin_left"),
             var("x.right") |EQ(REQUIRED)| var("super.margin_right"),

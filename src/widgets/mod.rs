@@ -9,6 +9,7 @@ pub mod scroll;
 pub mod input;
 pub mod window;
 pub mod menu;
+pub mod collection;
 
 pub use self::frame::*;
 pub use self::label::*;
@@ -19,6 +20,7 @@ pub use self::scroll::*;
 pub use self::input::*;
 pub use self::window::*;
 pub use self::menu::*;
+pub use self::collection::*;
 
 pub trait WidgetBase {
     fn tabstop(&self) -> bool { 

@@ -1,7 +1,9 @@
 use super::*;
 
+use std::borrow::Cow;
+
 pub struct Label<'a> {
-    text: &'a str,
+    text: Cow<'a, str>,
     size: f32,
     wrap: TextWrap,
     color: Color,
@@ -9,9 +11,19 @@ pub struct Label<'a> {
 }
 
 impl<'a> Label<'a> {
+    pub fn new_owned(text: String, size: f32, wrap: TextWrap) -> Self {
+        Self {
+            text: Cow::from(text),
+            size,
+            wrap,
+            color: Color::black(),
+            border: None,
+        }
+    }
+
     pub fn new(text: &'a str, size: f32, wrap: TextWrap) -> Self {
         Self {
-            text, 
+            text: Cow::from(text),
             size, 
             wrap,
             color: Color::black(),
@@ -19,9 +31,19 @@ impl<'a> Label<'a> {
         }
     }
 
+    pub fn simple_owned(text: String) -> Self {
+        Self {
+            text: Cow::from(text),
+            size: 16.0,
+            wrap: TextWrap::NoWrap,
+            color: Color::black(),
+            border: None,
+        }
+    }
+
     pub fn simple(text: &'a str) -> Self {
         Self {
-            text, 
+            text: Cow::from(text),
             size: 16.0, 
             wrap: TextWrap::NoWrap, 
             color: Color::black(),

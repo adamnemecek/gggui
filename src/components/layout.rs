@@ -194,5 +194,5 @@ macro_rules! layout_rules {
     // Entry point
     ($ui:path, $($tokens:tt,)*) => {
         $ui.rules(|var| vec![$(layout_rules!(var, [] $tokens)),*])
-    };        
+    };
 }
