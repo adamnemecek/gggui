@@ -30,23 +30,39 @@ mod feature {
         pub name: String,
         pub pass: String,
         pub remember: bool,
-        pub example_collection: Vec<u32>,
     }
 
     pub fn demo_frame(style: &Style, ui: &mut Ui, state: &mut State) {
 
+        // for the example we're going to make some kind of login window.
+        // it consists of a name, password, remember me field and login/cancel buttons.
+        // to show an example of some more stuff there is a scroll with a list of labels below it.
 
-
+        // a layer can be Back, Normal or Modal.
+        // 1) `Layer::Back` layers will always remain on the background.
+        // 2) `Layer::Normal` layers will be ordered where the last used layer is on top.
+        // 3) `Layer::Modal` layers will always be in front of all the other layers.
+        // this is a normal layer.
         ui.layer(style, "test", Layer::Normal).with(|ui| {
+            // a window is just a widget that can be dragged around in it's parent.
             ui.add("w", Window::new(Rect::from_wh(256.0, 256.0), true)).with(|ui| {
+                // make widgets for the login controls
                 ui.add("name_txt", Label::simple("Username: "));
                 ui.add("name", Input::new(&mut state.name));
                 ui.add("pass_txt", Label::simple("Password: "));
                 ui.add("pass", Input::password(&mut state.pass));
-                ui.add("b1", Button::new().with_size((128.0, 32.0)));
-                ui.add("b2", Button::new().with_size((128.0, 32.0)));
+
+                // the wrap function "wraps" the given widget inside the widget of the WidgetResult.
+                // So in this case the Login label lives inside the button.
+                // The wrap function also sets the right layout for the child so it is
+                //  aligned with the host margins.
+                ui.add("b1", Button::new().with_size((128.0, 32.0))).wrap(Label::simple("Login"));
+                ui.add("b2", Button::new().with_size((128.0, 32.0))).wrap(Label::simple("Cancel"));
                 state.remember = ui.add("cb", Toggle::checkbox(state.remember, true, false)).result.unwrap_or(state.remember);
                 ui.add("txt", Label::simple("Remember me"));
+
+                // The wrap_with functions does the same as wrap, but allow you to specify a closure
+                //  with which you can add children to the wrapped widget.
                 ui.add("list", Scroll::new().with_vertical_bar())
                     .wrap_with(Collection::new(TopToBottomLayout::new(ContentAlign::Leading)), |ui| {
                         for i in 0..20 {
@@ -55,6 +71,10 @@ mod feature {
                         }
                     });
 
+                // after you have specified widgets and they are not in a `Container`, you have
+                //  to specify layout rules. These are simple constraints that hint gggui where to
+                //  place widgets. You need to specify just enough rules for the whole thing to
+                //  make sense.
                 layout_rules!(ui, 
                     (name.right = super.margin_right - 20.0),
                     (name.left = name_txt.right),
@@ -86,6 +106,7 @@ mod feature {
         });
     }
 
+    // boilerplate code for winit, glutin and gfx.
     pub fn demo() {
         let window_config = glutin::WindowBuilder::new()
             .with_title("gg gui test".to_string())
@@ -124,7 +145,6 @@ mod feature {
             name: "".to_string(),
             pass: "".to_string(),
             remember: false,
-            example_collection: vec![0, 1, 2, 3, 4, 5],
         };
 
         while !finished {
